@@ -1,0 +1,24 @@
+{
+  "name": "seaquell",
+  "version": "0.1.0",
+  "description": "A Reverse ORM for MS SQL",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:fritzy/seaquell.git"
+  },
+  "dependencies": {
+    "mssql": "^2.3.2",
+    "verymodel": "^3.0.0"
+  },
+  "devDependencies": {
+    "code": "^2.0.1",
+    "getconfig": "^2.2.0",
+    "lab": "^7.3.0"
+  },
+  "scripts": {
+    "test": "lab -a code -t 100"
+  },
+  "author": "Nathanael C. Fritz",
+  "license": "MIT"
+}

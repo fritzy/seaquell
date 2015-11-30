@@ -1,0 +1,12 @@
+{
+  "mssql": {
+    "user": "sa",
+    "password": "password",
+    "server": "localhost",
+    "database": "seaquell_test",
+    "pool": {
+      "min": 3,
+      "max": 10
+    }
+  }
+}
