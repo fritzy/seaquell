@@ -144,3 +144,20 @@ __Note:__: When the method is attached to a model instance (static: false), the 
 ModelName.optsName(args) or Instance.optName(args)
 
 __return__: Promise with `{results, output}` or `modelInstance` if `oneResult` set to `true`.
+
+### mapQuery
+
+Create a method that runs a raw query, returning a Promise with model instances of the resulting rows.
+
+__mapQuery__(opts)
+
+```
+opts: {
+  name: (String) name of method,
+  query: (function) function returning query string. passed (args, instance)
+  oneResult: (Boolean) return array of model instance if false (default) or single if true,
+  static: (Boolean) attach to Model Factory or model instances
+}
+```
+
+__return__: `undefined`

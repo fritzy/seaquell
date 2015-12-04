@@ -21,6 +21,12 @@ const methodValidators = {
     output: Joi.object().unknown(),
     query: Joi.func().required(),
     oneResult: Joi.boolean().default(false)
+  }),
+  mapQuery: Joi.object({
+    static: Joi.boolean().default(false),
+    name: Joi.string().required(),
+    query: Joi.func().required(),
+    oneResult: Joi.boolean().default(false)
   })
 };
 
@@ -58,14 +64,70 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
 
 (function () {
 
-  //https://www.npmjs.com/package/mssql#data-types
-  //{
-  //  name: 'someproc',
-  //  static: true/false,
-  //  args: {
-  //    'somearg': mssql.type
-  //  }
-  //}
+  this.mapQuery = function mapStatement(opts) {
+    const optsValid = methodValidators.mapQuery.validate(opts);
+    if (optsValid.error) {
+      throw optsValid.error;
+    }
+    if (opts.static) {
+      return this._mapStaticQuery(opts);
+    } else {
+      return this._mapInstanceQuery(opts);
+    }
+  };
+  
+  this._mapStaticQuery = function mapStaticQuery(opts) {
+    Model.prototype[opts.name] = function (args) {
+      const promise = new Promise((resolve, reject) => {
+        this.getDB((db) => {
+          const query = new mssql.Request(db);
+          const qstring = opts.query(args);
+          query.query(qstring, (err, recordset) => {
+            if (err) {
+              return reject(err);
+            }
+            if (opts.oneResult) {
+              return resolve(this.create(recordset[0]));
+            }
+            const results = [];
+            recordset[0].forEach((row) => {
+              results.push(this.create(row));
+            });
+            resolve({results, returnValue});
+          });
+        });
+      });
+      return promise;
+    }
+  };
+  
+  this._mapInstanceQuery = function mapInstanceQuery(opts) {
+    const extension = {};
+    const model = this;
+    extension[opts.name] = function (args) {
+      const promise = new Promise((resolve, reject) => {
+        model.getDB((db) => {
+          const request = new mssql.Request(db);
+          const qstring = opts.query(args, this);
+          request.query(qstring, (err, recordset) => {
+            if (err) {
+              return reject(err);
+            }
+            if (opts.oneResult) {
+              return resolve(model.create(recordset[0]));
+            }
+            const results = [];
+            recordset[0].forEach((row) => {
+              results.push(model.create(row));
+            });
+            resolve({results, returnValue});
+          });
+        });
+      });
+      return promise;
+    }
+    this.extendModel(extension);
+  };
 
   this.mapStatement = function mapStatement(opts) {
     const optsValid = methodValidators.mapStatement.validate(opts);
@@ -116,11 +178,11 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
             return reject(err);
           }
           if (opts.oneResult) {
-            return resolve(this.create(recordset[0][0]));
+            return resolve(model.create(recordset[0]));
           }
           const results = [];
-          recordset[0].forEach((row) => {
-            results.push(this.create(row));
+          recordset.forEach((row) => {
+            results.push(model.create(row));
           });
           resolve({results, returnValue});
         });

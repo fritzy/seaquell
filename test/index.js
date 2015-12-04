@@ -59,6 +59,20 @@ const p2 = Test.mapStatement({
   },
   query: (args) => `SELECT @FirstName AS FirstName, @LastName AS LastName, 'derp' AS hurr`
 });
+
+Test.mapQuery({
+  static: true,
+  oneResult: true,
+  name: 'staticquery',
+  query: (args) => `SELECT '${args.FirstName}' AS FirstName, '${args.LastName}' AS LastName, 'derp' AS hurr`
+});
+
+Test.mapQuery({
+  static: false,
+  oneResult: true,
+  name: 'instancequery',
+  query: (args, model) => `SELECT '${model.FirstName}' AS FirstName, '${model.LastName}' AS LastName, 'derp' AS hurr`
+});
   
 lab.experiment('testing functions', () => {
   
@@ -142,7 +156,34 @@ AS
       console.log(err.stack);
       done();
     });
-    done();
+  });
+  
+  lab.test('static query', (done) => {
+    Test.staticquery({
+      FirstName: 'Nathan',
+      LastName: 'Fritz',
+    }).then((results) => {
+      expect(results.FirstName).to.equal('Nathan');
+      expect(results.LastName).to.equal('Fritz');
+      done();
+    }).catch((err) => {
+      console.log(err.stack);
+      done();
+    });
+  });
+
+  lab.test('instance query', (done) => {
+    const test = Test.create({
+      FirstName: 'Nathan',
+      LastName: 'Fritz',
+    });
+    test.instancequery().then((results) => {
+      expect(results.FirstName).to.equal('Nathan');
+      expect(results.LastName).to.equal('Fritz');
+      done();
+    }).catch((err) => {
+      console.log(err.stack);
+    });
   });
 
   lab.test('disconnect', (done) => {
