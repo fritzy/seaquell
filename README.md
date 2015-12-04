@@ -31,7 +31,7 @@ const Test = new Seaquell.Model({
   LastName: {},
 });
 
-Test.mapProceedure({
+Test.mapProcedure({
   static: true,
   name: 'testproc',
   args: {
@@ -40,7 +40,7 @@ Test.mapProceedure({
   }
 });
 
-Test.mapProceedure({
+Test.mapProcedure({
   static: false,
   name: 'testproc',
   args: {
