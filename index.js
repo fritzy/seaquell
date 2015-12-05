@@ -197,9 +197,11 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
     return new Promise((resolve, reject) => {
       this.getDB((db) => {
         const statement = new mssql.PreparedStatement(db);
-        Object.keys(opts.args).forEach((arg) => {
-          statement.input(arg, opts.args[arg]);
-        });
+        if (opts.args) {
+          Object.keys(opts.args).forEach((arg) => {
+            statement.input(arg, opts.args[arg]);
+          });
+        }
         if (opts.output) {
           Object.keys(opts.output).forEach((arg) => {
             statement.output(arg, opts.args[arg]);
@@ -234,9 +236,11 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
       const promise = new Promise((resolve, reject) => {
         this.getDB((db) => {
           const request = new mssql.Request(db);
-          Object.keys(opts.args).forEach((arg) => {
-            request.input(arg, opts.args[arg], args[arg]);
-          });
+          if (opts.args) {
+            Object.keys(opts.args).forEach((arg) => {
+              request.input(arg, opts.args[arg], args[arg]);
+            });
+          }
           if (opts.output) {
             request.output(opts.output[0], opts.output[1]);
           }
@@ -251,7 +255,7 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
             recordset[0].forEach((row) => {
               results.push(this.create(row));
             });
-            resolve({results, returnValue});
+            resolve(results);
           });
         });
       });
@@ -269,9 +273,11 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
       const promise = new Promise((resolve, reject) => {
         model.getDB((db) => {
           const request = new mssql.Request(db);
-          Object.keys(opts.args).forEach((arg) => {
-            request.input(arg, opts.args[arg], this[arg] || args[arg]);
-          });
+          if (opts.args) {
+            Object.keys(opts.args).forEach((arg) => {
+              request.input(arg, opts.args[arg], this[arg] || args[arg]);
+            });
+          }
           if (opts.output) {
             request.output(opts.output[0], opts.output[1]);
           }
