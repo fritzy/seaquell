@@ -292,7 +292,7 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
             recordset[0].forEach((row) => {
               results.push(model.create(row));
             });
-            resolve({results, returnValue});
+            resolve(results);
           });
         });
       });
