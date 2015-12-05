@@ -30,6 +30,13 @@ const methodValidators = {
   })
 };
 
+function EmptyResult() {
+  Error.apply(this, arguments);
+  this.message = "EmptyResult";
+}
+
+EmptyResult.prototype = Object.create(Error.prototype);
+
 let connection = null;
 
 function Model() {
@@ -87,7 +94,11 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
               return reject(err);
             }
             if (opts.oneResult) {
-              return resolve(this.create(recordset[0]));
+              if (recordset[0].length === 0) {
+                return reject(new EmptyResult);
+              } else {
+                return resolve(this.create(recordset[0]));
+              }
             }
             const results = [];
             recordset[0].forEach((row) => {
@@ -114,7 +125,11 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
               return reject(err);
             }
             if (opts.oneResult) {
-              return resolve(model.create(recordset[0]));
+              if (recordset[0].length === 0) {
+                return reject(new EmptyResult);
+              } else {
+                return resolve(model.create(recordset[0]));
+              }
             }
             const results = [];
             recordset[0].forEach((row) => {
@@ -149,7 +164,11 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
             return reject(err);
           }
           if (opts.oneResult) {
-            return resolve(this.create(recordset[0]));
+            if (recordset[0].length === 0) {
+              return reject(new EmptyResult);
+            } else {
+              return resolve(this.create(recordset[0]));
+            }
           }
           const results = [];
           recordset[0].forEach((row) => {
@@ -178,7 +197,11 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
             return reject(err);
           }
           if (opts.oneResult) {
-            return resolve(model.create(recordset[0]));
+            if (recordset[0].length === 0) {
+              return reject(new EmptyResult);
+            } else {
+              return resolve(model.create(recordset[0]));
+            }
           }
           const results = [];
           recordset.forEach((row) => {
@@ -249,7 +272,11 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
               return reject(err);
             }
             if (opts.oneResult) {
-              return resolve(this.create(recordset[0][0]));
+              if (recordset[0].length === 0) {
+                return reject(new EmptyResult);
+              } else {
+                return resolve(this.create(recordset[0][0]));
+              }
             }
             const results = [];
             recordset[0].forEach((row) => {
@@ -286,7 +313,11 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
               return reject(err);
             }
             if (opts.oneResult) {
-              return resolve(model.create(recordset[0][0]));
+              if (recordset[0].length === 0) {
+                return reject(new EmptyResult);
+              } else {
+                return resolve(model.create(recordset[0][0]));
+              }
             }
             const results = [];
             recordset[0].forEach((row) => {
@@ -307,5 +338,6 @@ module.exports = {
   Model,
   setConnection: function setConnection(opts) {
     connection = opts;
-  }
+  },
+  EmptyResult
 };

@@ -67,6 +67,15 @@ const p3 = Test.mapProcedure({
   oneResult: false,
 });
 
+const p4 = Test.mapProcedure({
+  static: true,
+  name: 'getuno',
+  args: {
+    'LAST_NAME': mssql.NVarChar(50)
+  },
+  oneResult: true,
+});
+
 Test.mapQuery({
   static: true,
   oneResult: true,
@@ -83,7 +92,7 @@ Test.mapQuery({
   
 lab.experiment('testing functions', () => {
   
-  lab.test('create temp table', (done) => {
+  lab.test('create temp table proc', (done) => {
     Test.getDB((db) => {
       const request = new mssql.Request(db);
       request.multiple = true;
@@ -108,8 +117,35 @@ AS
     });
   });
   
+  lab.test('create get table proc', (done) => {
+    Test.getDB((db) => {
+      const request = new mssql.Request(db);
+      request.multiple = true;
+      const q1 =request.query(`
+IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'getuno') AND type IN (N'P', N'PC'))
+DROP PROCEDURE getuno`);
+      q1.then(() => {
+        const r2 = new mssql.Request(db);
+        const q2 = r2.query(`
+  CREATE PROCEDURE getuno
+    @LAST_NAME VARCHAR(50)
+  AS
+    CREATE TABLE #TempTest (FIRST_NAME VARCHAR(50), LAST_NAME VARCHAR(50));
+    INSERT INTO #TempTest (FIRST_NAME, LAST_NAME) VALUES ('Nathan', 'Fritz'), ('Robert', 'Robles'), ('Cow', 'Town');
+    SELECT * FROM #TempTest WHERE LAST_NAME=@LAST_NAME;
+  `);
+        return q2;
+      }).then(done)
+      .catch((e) => {
+        console.log(e);
+        console.log(e.stack);
+        done();
+      });
+    });
+  });
+  
   lab.test('loaded statements', (done) => {
-    Promise.all([p1, p2, p3]).then(() => {
+    Promise.all([p1, p2, p3, p4]).then(() => {
       done();
     }).catch((err) => {
       console.log(err.stack);
@@ -227,6 +263,24 @@ AS
       expect(results[0].FirstName).to.equal('Nathan');
       expect(results[0].LastName).to.equal('Fritz');
       expect(results.length).to.equal(3);
+      done();
+    }).catch((err) => {
+      console.log(err.stack);
+    });
+  });
+  
+  lab.test('unfound static statment', (done) => {
+    Test.getuno({LAST_NAME: 'Derpy'}).then((results) => {
+    }).catch((err) => {
+      expect(err).to.be.an.instanceof(Seaquell.EmptyResult);
+      done();
+    });
+  });
+  
+  lab.test('single static statment', (done) => {
+    Test.getuno({LAST_NAME: 'Fritz'}).then((results) => {
+      expect(results.FirstName).to.equal('Nathan');
+      expect(results.LastName).to.equal('Fritz');
       done();
     }).catch((err) => {
       console.log(err.stack);
