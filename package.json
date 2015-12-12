@@ -9,12 +9,12 @@
   },
   "dependencies": {
     "mssql": "^2.3.2",
-    "verymodel": "^3.2.1"
+    "verymodel": "^3.3.0"
   },
   "devDependencies": {
     "code": "^2.0.1",
     "getconfig": "^2.2.0",
-    "lab": "^7.3.0"
+    "lab": "^8.0.0"
   },
   "scripts": {
     "test": "lab -a code -v -t 70"

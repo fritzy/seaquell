@@ -2,7 +2,6 @@
 
 A reverse-ORM for query Microsoft SQL Server.
 
-
 In a reverse-ORM, you model what the query results in rather than modeling the tables.
 
 Models are extensions of [VeryModel](https://github.com/fritzy/verymodel).
@@ -68,6 +67,10 @@ Test.testproc({
   console.log(err.stack);
 });
 ```
+
+## Install
+
+![npm i seaquell](https://nodei.co/npm/seaquell.png)
 
 ## setConnection
 
@@ -161,3 +164,9 @@ opts: {
 ```
 
 __return__: `undefined`
+
+# Seaquell.getModel(name)
+
+__seaquell.getModel(name)__
+
+Returns the model named 'name';

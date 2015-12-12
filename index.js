@@ -39,8 +39,14 @@ EmptyResult.prototype = Object.create(Error.prototype);
 
 let connection = null;
 
+const cached_models = {};
+
 function Model() {
   verymodel.VeryModel.apply(this, arguments);
+
+  if (this.options.name) {
+    cached_models[this.options.name] = this;
+  }
 
   this._preparedStatements = {};
 
@@ -339,5 +345,8 @@ module.exports = {
   setConnection: function setConnection(opts) {
     connection = opts;
   },
-  EmptyResult
+  EmptyResult,
+  getModel: function getModel(name) {
+    return cached_models[name];
+  }
 };
