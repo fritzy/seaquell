@@ -12,7 +12,8 @@ const methodValidators = {
     name: Joi.string().required(),
     args: Joi.object().unknown(),
     output: Joi.array().min(2).max(2),
-    oneResult: Joi.boolean().default(false)
+    oneResult: Joi.boolean().default(false),
+    resultModels: Joi.array(Joi.string())
   }),
   mapStatement: Joi.object({
     static: Joi.boolean().default(false),
@@ -253,6 +254,7 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
     if (optsValid.error) {
       throw optsValid.error;
     }
+    opts.resultModels = opts.resultModels || [];
     if (opts.static) {
       return this.mapStaticProc(opts);
     } else {
@@ -273,22 +275,51 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
           if (opts.output) {
             request.output(opts.output[0], opts.output[1]);
           }
-          request.execute(opts.name, (err, recordset, returnValue) => {
+          request.execute(opts.name, (err, recordsets, returnValue) => {
             if (err) {
               return reject(err);
             }
             if (opts.oneResult) {
-              if (recordset[0].length === 0) {
+              if (recordsets[0].length === 0) {
                 return reject(new EmptyResult);
               } else {
-                return resolve(this.create(recordset[0][0]));
+                recordsets[0] = recordsets[0].splice(0, 1);
+                //return resolve(this.create(recordsets[0][0]));
               }
             }
-            const results = [];
-            recordset[0].forEach((row) => {
-              results.push(this.create(row));
-            });
-            resolve(results);
+            const results = new Map();
+            for (let idx in recordsets) {
+              const rs = recordsets[idx];
+              if (rs === 0) break;
+              let model = opts.resultModels[idx] || this;
+              if (typeof model === 'string') {
+                model = this.getModel(model);
+              }
+              results.set(model, []);
+              rs.forEach((row) => {
+                results.get(model).push(model.create(row));
+              });
+            }
+            for (let factory of results.keys()) {
+              for (let field of factory.fields) {
+                if (factory.definition[field].hasOwnProperty('remote')) {
+                  let lfield = factory.definition[field].local;
+                  let rfield = factory.definition[field].remote;
+                  let relFactory = this.getModel(factory.definition[field].collection || factory.definition[field].model);
+                  (results.get(factory) || []).forEach( (local) => {
+                    (results.get(relFactory) || []).forEach( (remote) => {
+                      if (remote[rfield] == local[lfield]) {
+                        local[field] = remote;
+                      }
+                    });
+                  });
+                }
+              }
+            }
+            if (opts.oneResult) {
+              return resolve(results.get(this)[0]);
+            }
+            return resolve(results.get(this));
           });
         });
       });

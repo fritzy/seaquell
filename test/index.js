@@ -76,6 +76,7 @@ const p4 = Test.mapProcedure({
   oneResult: true,
 });
 
+
 Test.mapQuery({
   static: true,
   oneResult: true,
@@ -137,6 +138,34 @@ DROP PROCEDURE getuno`);
         return q2;
       }).then(done)
       .catch((e) => {
+        console.log(e);
+        console.log(e.stack);
+        done();
+      });
+    });
+  });
+  
+  lab.test('create multiresults proc', (done) => {
+    Test.getDB((db) => {
+      const request = new mssql.Request(db);
+      request.multiple = true;
+      const q1 =request.query(`
+IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'multiresult') AND type IN (N'P', N'PC'))
+DROP PROCEDURE multiresult`);
+      const r2 = new mssql.Request(db);
+      const q2 = r2.query(`
+CREATE PROCEDURE multiresult
+AS
+  CREATE TABLE #Name (id INT, first VARCHAR(50), last VARCHAR(50));
+  CREATE TABLE #Item (name_id INT, name VARCHAR(50), weight INT);
+  INSERT INTO #Name (id, first, last) VALUES (1, 'Nathan', 'Fritz'), (2, 'Robert', 'Robles'), (3, 'Cow', 'Town');
+  INSERT INTO #Item (name_id, name, weight) VALUES (1, 'crowbar', 15), (1, 'lettuce', 1), (3, 'cow', 13), (3, 'hair', 0);
+  SELECT * FROM #Name;
+  SELECT * FROM #Item;
+`);
+      Promise.all([q1, q2]).then(() => {
+        done();
+      }).catch((e) => {
         console.log(e);
         console.log(e.stack);
         done();
@@ -253,9 +282,7 @@ AS
       expect(results.FirstName).to.equal('Nathan');
       expect(results.LastName).to.equal('Fritz');
       done();
-    }).catch((err) => {
-      console.log(err.stack);
-    });
+    }).catch(done);
   });
   
   lab.test('multi static statment', (done) => {
@@ -264,13 +291,12 @@ AS
       expect(results[0].LastName).to.equal('Fritz');
       expect(results.length).to.equal(3);
       done();
-    }).catch((err) => {
-      console.log(err.stack);
-    });
+    }).catch(done);
   });
   
   lab.test('unfound static statment', (done) => {
     Test.getuno({LAST_NAME: 'Derpy'}).then((results) => {
+      done('should have errored');
     }).catch((err) => {
       expect(err).to.be.an.instanceof(Seaquell.EmptyResult);
       done();
@@ -282,10 +308,35 @@ AS
       expect(results.FirstName).to.equal('Nathan');
       expect(results.LastName).to.equal('Fritz');
       done();
-    }).catch((err) => {
-      console.log(err.stack);
-    });
+    }).catch(done);
   });
+
+  lab.test('join multi', (done) => {
+    const Item = new Seaquell.Model({
+      'name_id': {},
+      'name': {},
+      'weight': {}
+    }, {name: 'jm_item', cache: true});
+    const Name = new Seaquell.Model({
+      'id': {},
+      'first': {},
+      'last': {},
+      'items': { collection: 'jm_item', local: 'id', 'remote': 'name_id' }
+    }, {name: 'rm_name', cache: true});
+    Name.mapProcedure({
+      static: true,
+      name: 'multiresult',
+      oneResult: false,
+      resultModels: ['', 'jm_item']
+    });
+    Name.multiresult()
+    .then((names) => {
+      expect(names[0].items[1].name).to.equal('lettuce');
+      expect(names[2].items[1].name).to.equal('hair');
+      done();
+    }).catch(done);
+  });
+
 
   lab.test('disconnect', (done) => {
     Test.getDB((db) => {
