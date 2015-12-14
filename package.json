@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "mssql": "^2.3.2",
-    "verymodel": "^3.3.1"
+    "verymodel": "^3.3.2"
   },
   "devDependencies": {
     "code": "^2.0.1",
@@ -17,7 +17,7 @@
     "lab": "^8.0.0"
   },
   "scripts": {
-    "test": "lab -a code -v -t 70"
+    "test": "lab -a code -c"
   },
   "author": "Nathanael C. Fritz",
   "license": "MIT"

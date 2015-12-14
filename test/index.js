@@ -76,6 +76,13 @@ const p4 = Test.mapProcedure({
   oneResult: true,
 });
 
+const p5 = Test.mapStatement({
+  static: false,
+  name: 'noargs',
+  oneResult: true,
+  query: (args) => `SELECT 'Billy' AS FirstName, 'Bob' AS LastName`
+});
+
 
 Test.mapQuery({
   static: true,
@@ -89,6 +96,13 @@ Test.mapQuery({
   oneResult: true,
   name: 'instancequery',
   query: (args, model) => `SELECT '${model.FirstName}' AS FirstName, '${model.LastName}' AS LastName, 'derp' AS hurr`
+});
+
+Test.mapQuery({
+  static: true,
+  oneResult: true,
+  name: 'badquery',
+  query: (args, model) => `SELECT PJN ON '${model.FirstName}' AS FirstName, '${model.LastName}' AS LastName, 'derp' AS hurr`
 });
   
 lab.experiment('testing functions', () => {
@@ -174,7 +188,7 @@ AS
   });
   
   lab.test('loaded statements', (done) => {
-    Promise.all([p1, p2, p3, p4]).then(() => {
+    Promise.all([p1, p2, p3, p4, p5]).then(() => {
       done();
     }).catch((err) => {
       console.log(err.stack);
@@ -337,11 +351,61 @@ AS
     }).catch(done);
   });
 
+  lab.test('bad MapQuery', (done) => {
+    expect(() => {
+      Test.mapQuery({
+      });
+    }).to.throw();
+    done();
+  });
+  
+  lab.test('bad mapStatement', (done) => {
+    expect(() => {
+      Test.mapStatement({
+      });
+    }).to.throw();
+    done();
+  });
+  
+  lab.test('bad mapProcedure', (done) => {
+    expect(() => {
+      Test.mapProcedure({
+      });
+    }).to.throw();
+    done();
+  });
+
+  lab.test('bad query', (done) => {
+    expect(() => {
+      Test.badQuery({
+      });
+    }).to.throw();
+    done();
+  });
+
+  lab.test('queryResults error', (done) => {
+    Test._queryResults({}, 'ERROR', [], 0, Promise.resolve, function () {
+      done();
+    });
+  });
+
+  lab.test('no args statement', (done) => {
+    const test = Test.create();
+    test.noargs()
+    .then((model) => {
+      expect(model.FirstName).to.equal('Billy');
+      expect(model.LastName).to.equal('Bob');
+      done();
+    });
+  });
+
 
   lab.test('disconnect', (done) => {
     Test.getDB((db) => {
-      db.close();
-      done();
+      Test.unprepare('teststate').then(() => {
+        db.close();
+        done();
+      });
     });
   });
 });

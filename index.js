@@ -51,14 +51,18 @@ function Model() {
 
   this._preparedStatements = {};
 
+  /* $lab:coverage:off$ */
   if (connection !== null) {
     this.options.mssql = connection;
   }
+  /* $lab:coverage:on$ */
 
   this.getDB = (cb) => {
     if (this.mssql === null)  {
       const conn = new mssql.Connection(this.options.mssql, (err) => {
+        /* $lab:coverage:off$ */
         if (err) throw err;
+        /* $lab:coverage:on$ */
         this.mssql = conn;
         cb(conn);
       });
@@ -97,21 +101,7 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
           const query = new mssql.Request(db);
           const qstring = opts.query(args);
           query.query(qstring, (err, recordset) => {
-            if (err) {
-              return reject(err);
-            }
-            if (opts.oneResult) {
-              if (recordset[0].length === 0) {
-                return reject(new EmptyResult);
-              } else {
-                return resolve(this.create(recordset[0]));
-              }
-            }
-            const results = [];
-            recordset[0].forEach((row) => {
-              results.push(this.create(row));
-            });
-            resolve({results, returnValue});
+            return this._queryResults(opts, err, recordset, undefined, resolve, reject);
           });
         });
       });
@@ -128,21 +118,7 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
           const request = new mssql.Request(db);
           const qstring = opts.query(args, this);
           request.query(qstring, (err, recordset) => {
-            if (err) {
-              return reject(err);
-            }
-            if (opts.oneResult) {
-              if (recordset[0].length === 0) {
-                return reject(new EmptyResult);
-              } else {
-                return resolve(model.create(recordset[0]));
-              }
-            }
-            const results = [];
-            recordset[0].forEach((row) => {
-              results.push(model.create(row));
-            });
-            resolve({results, returnValue});
+            return model._queryResults(opts, err, recordset, undefined, resolve, reject);
           });
         });
       });
@@ -167,21 +143,7 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
     Model.prototype[opts.name] = function (args) {
       const promise = new Promise((resolve, reject) => {
         this._preparedStatements[opts.name].execute(args, (err, recordset, returnValue) => {
-          if (err) {
-            return reject(err);
-          }
-          if (opts.oneResult) {
-            if (recordset[0].length === 0) {
-              return reject(new EmptyResult);
-            } else {
-              return resolve(this.create(recordset[0]));
-            }
-          }
-          const results = [];
-          recordset[0].forEach((row) => {
-            results.push(this.create(row));
-          });
-          resolve({results, returnValue});
+          return this._queryResults(opts, err, recordset, returnValue, resolve, reject);
         });
       });
       return promise;
@@ -193,28 +155,16 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
     const extension = {};
     const model = this;
     extension[opts.name] = function (args) {
+      /* $lab:coverage:off$ */
       if (typeof args === 'undefined') {
         args = {};
       }
+      /* $lab:coverage:on$ */
       const input = this.toJSON();
       lodash.assign(input, args);
       const promise = new Promise((resolve, reject) => {
         model._preparedStatements[opts.name].execute(input, (err, recordset, returnValue) => {
-          if (err) {
-            return reject(err);
-          }
-          if (opts.oneResult) {
-            if (recordset[0].length === 0) {
-              return reject(new EmptyResult);
-            } else {
-              return resolve(model.create(recordset[0]));
-            }
-          }
-          const results = [];
-          recordset.forEach((row) => {
-            results.push(model.create(row));
-          });
-          resolve({results, returnValue});
+          return model._queryResults(opts, err, recordset, returnValue, resolve, reject);
         });
       });
       return promise;
@@ -222,6 +172,24 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
     this.extendModel(extension);
     return this._prepare(opts);
   };
+
+  this._queryResults = function _queryResults(opts, err, recordset, returnValue, resolve, reject) {
+    if (err) {
+      return reject(err);
+    }
+    if (opts.oneResult) {
+      if (recordset[0].length === 0) {
+        return reject(new EmptyResult);
+      } else {
+        return resolve(this.create(recordset[0]));
+      }
+    }
+    const results = [];
+    recordset.forEach((row) => {
+      results.push(this.create(row));
+    });
+    return resolve({results, returnValue});
+  }
 
   this._prepare = function _prepare(opts) {
     return new Promise((resolve, reject) => {
@@ -276,50 +244,7 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
             request.output(opts.output[0], opts.output[1]);
           }
           request.execute(opts.name, (err, recordsets, returnValue) => {
-            if (err) {
-              return reject(err);
-            }
-            if (opts.oneResult) {
-              if (recordsets[0].length === 0) {
-                return reject(new EmptyResult);
-              } else {
-                recordsets[0] = recordsets[0].splice(0, 1);
-                //return resolve(this.create(recordsets[0][0]));
-              }
-            }
-            const results = new Map();
-            for (let idx in recordsets) {
-              const rs = recordsets[idx];
-              if (rs === 0) break;
-              let model = opts.resultModels[idx] || this;
-              if (typeof model === 'string') {
-                model = this.getModel(model);
-              }
-              results.set(model, []);
-              rs.forEach((row) => {
-                results.get(model).push(model.create(row));
-              });
-            }
-            for (let factory of results.keys()) {
-              for (let field of factory.fields) {
-                if (factory.definition[field].hasOwnProperty('remote')) {
-                  let lfield = factory.definition[field].local;
-                  let rfield = factory.definition[field].remote;
-                  let relFactory = this.getModel(factory.definition[field].collection || factory.definition[field].model);
-                  (results.get(factory) || []).forEach( (local) => {
-                    (results.get(relFactory) || []).forEach( (remote) => {
-                      if (remote[rfield] == local[lfield]) {
-                        local[field] = remote;
-                      }
-                    });
-                  });
-                }
-              }
-            }
-            if (opts.oneResult) {
-              return resolve(results.get(this)[0]);
-            }
-            return resolve(results.get(this));
+            return this._procedureResults(opts, err, recordsets, returnValue, reject, resolve);
           });
         });
       });
@@ -331,9 +256,11 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
     const extension = {};
     const model = this;
     extension[opts.name] = function (args) {
+      /* $lab:coverage:off$ */
       if (typeof args === 'undefined') {
         args = {};
       }
+      /* $lab:coverage:on$ */
       const promise = new Promise((resolve, reject) => {
         model.getDB((db) => {
           const request = new mssql.Request(db);
@@ -345,22 +272,8 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
           if (opts.output) {
             request.output(opts.output[0], opts.output[1]);
           }
-          request.execute(opts.name, (err, recordset, returnValue) => {
-            if (err) {
-              return reject(err);
-            }
-            if (opts.oneResult) {
-              if (recordset[0].length === 0) {
-                return reject(new EmptyResult);
-              } else {
-                return resolve(model.create(recordset[0][0]));
-              }
-            }
-            const results = [];
-            recordset[0].forEach((row) => {
-              results.push(model.create(row));
-            });
-            resolve(results);
+          request.execute(opts.name, (err, recordsets, returnValue) => {
+            return model._procedureResults(opts, err, recordsets, returnValue, reject, resolve);
           });
         });
       });
@@ -368,6 +281,53 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
     };
     this.extendModel(extension);
   };
+
+  this._procedureResults = function _procedureResults(opts, err, recordsets, returnValue, reject, resolve) {
+    if (err) {
+      return reject(err);
+    }
+    if (opts.oneResult) {
+      if (recordsets[0].length === 0) {
+        return reject(new EmptyResult);
+      } else {
+        recordsets[0] = recordsets[0].splice(0, 1);
+        //return resolve(this.create(recordsets[0][0]));
+      }
+    }
+    const results = new Map();
+    for (let idx in recordsets) {
+      const rs = recordsets[idx];
+      if (rs === 0) break;
+      let model = opts.resultModels[idx] || this;
+      if (typeof model === 'string') {
+        model = this.getModel(model);
+      }
+      results.set(model, []);
+      rs.forEach((row) => {
+        results.get(model).push(model.create(row));
+      });
+    }
+    for (let factory of results.keys()) {
+      for (let field of factory.fields) {
+        if (factory.definition[field].hasOwnProperty('remote')) {
+          let lfield = factory.definition[field].local;
+          let rfield = factory.definition[field].remote;
+          let relFactory = this.getModel(factory.definition[field].collection || factory.definition[field].model);
+          (results.get(factory) || []).forEach( (local) => {
+            (results.get(relFactory) || []).forEach( (remote) => {
+              if (remote[rfield] == local[lfield]) {
+                local[field] = remote;
+              }
+            });
+          });
+        }
+      }
+    }
+    if (opts.oneResult) {
+      return resolve(results.get(this)[0]);
+    }
+    return resolve(results.get(this));
+  }
 
 }).call(Model.prototype);
 
