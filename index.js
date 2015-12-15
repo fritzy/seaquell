@@ -13,6 +13,7 @@ const methodValidators = {
     args: Joi.object().unknown(),
     output: Joi.array().min(2).max(2),
     oneResult: Joi.boolean().default(false),
+    processArgs: Joi.func(),
     resultModels: Joi.array(Joi.string())
   }),
   mapStatement: Joi.object({
@@ -232,6 +233,10 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
 
   this.mapStaticProc = function mapStaticProc(opts) {
     Model.prototype[opts.name] = function (args) {
+      args = args || {};
+      if (typeof opts.processArgs === 'function') {
+        args = opts.processArgs(args, this);
+      }
       const promise = new Promise((resolve, reject) => {
         this.getDB((db) => {
           const request = new mssql.Request(db);
@@ -256,11 +261,10 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
     const extension = {};
     const model = this;
     extension[opts.name] = function (args) {
-      /* $lab:coverage:off$ */
-      if (typeof args === 'undefined') {
-        args = {};
+      args = args || {};
+      if (typeof opts.processArgs === 'function') {
+        args = opts.processArgs(args, this);
       }
-      /* $lab:coverage:on$ */
       const promise = new Promise((resolve, reject) => {
         model.getDB((db) => {
           const request = new mssql.Request(db);

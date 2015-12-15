@@ -134,7 +134,9 @@ opts: {
     etc..
   },
   oneResult: (Boolean) return array of model instance if false (default) or single if true,
-  static: (Boolean) attach to Model Factory or model instances
+  static: (Boolean) attach to Model Factory or model instances,
+  resultModels: (Array) string names of Model Factories to use for creating recordsets if more than one
+  processArgs: (function(args, model) return args) function to process incoming args of resulting method before passing it on to the stored proceedure. The 2nd arguement will be the factory for static methods and the model instance for non-static methods.
 }
 ```
 
