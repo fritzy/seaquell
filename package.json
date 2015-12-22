@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "mssql": "^2.3.2",
-    "verymodel": "^3.3.2"
+    "underscore": "^1.8.3",
+    "verymodel": "^3.3.3"
   },
   "devDependencies": {
     "code": "^2.0.1",

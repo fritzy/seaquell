@@ -5,6 +5,7 @@ const lodash = require('lodash');
 const assert = require('assert');
 const Joi = require('joi');
 const mssql = require('mssql');
+const _ = require('underscore');
 
 const methodValidators = {
   mapProcedure: Joi.object({
@@ -223,12 +224,42 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
     if (optsValid.error) {
       throw optsValid.error;
     }
-    opts.resultModels = opts.resultModels || [];
+    opts.resultModels = opts.resultModels || [this];
     if (opts.static) {
       return this.mapStaticProc(opts);
     } else {
       return this.mapInstProc(opts);
     }
+  };
+
+  this._makeRequest = function (db, args, opts) {
+    const request = new mssql.Request(db);
+    if (opts.args) {
+      Object.keys(opts.args).forEach((arg) => {
+        let argdef = opts.args[arg];
+        if (argdef.hasOwnProperty('type') && argdef.type === 'TVP') {
+          let tvp = new mssql.Table();
+          argdef.types.forEach((mtype) => {
+            tvp.columns.add(mtype[0], mtype[1]);
+          });
+          args[arg].forEach((argrow) => {
+            let row = [];
+            argdef.types.forEach((mtype) => {
+              let col = mtype[0];
+              row.push(argrow[col]);
+            });
+            tvp.rows.add.apply(tvp.rows, row);
+          });
+          request.input(arg, tvp);
+        } else {
+          request.input(arg, opts.args[arg], args[arg]);
+        }
+      });
+    }
+    if (opts.output) {
+      request.output(opts.output[0], opts.output[1]);
+    }
+    return request;
   };
 
   this.mapStaticProc = function mapStaticProc(opts) {
@@ -239,15 +270,7 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
       }
       const promise = new Promise((resolve, reject) => {
         this.getDB((db) => {
-          const request = new mssql.Request(db);
-          if (opts.args) {
-            Object.keys(opts.args).forEach((arg) => {
-              request.input(arg, opts.args[arg], args[arg]);
-            });
-          }
-          if (opts.output) {
-            request.output(opts.output[0], opts.output[1]);
-          }
+          const request = this._makeRequest(db, args, opts);
           request.execute(opts.name, (err, recordsets, returnValue) => {
             return this._procedureResults(opts, err, recordsets, returnValue, reject, resolve);
           });
@@ -262,20 +285,13 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
     const model = this;
     extension[opts.name] = function (args) {
       args = args || {};
+      args = _.extend(this.toJSON(), args);
       if (typeof opts.processArgs === 'function') {
         args = opts.processArgs(args, this);
       }
       const promise = new Promise((resolve, reject) => {
         model.getDB((db) => {
-          const request = new mssql.Request(db);
-          if (opts.args) {
-            Object.keys(opts.args).forEach((arg) => {
-              request.input(arg, opts.args[arg], this[arg] || args[arg]);
-            });
-          }
-          if (opts.output) {
-            request.output(opts.output[0], opts.output[1]);
-          }
+          const request = model._makeRequest(db, args, opts);
           request.execute(opts.name, (err, recordsets, returnValue) => {
             return model._procedureResults(opts, err, recordsets, returnValue, reject, resolve);
           });
@@ -327,10 +343,14 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
         }
       }
     }
-    if (opts.oneResult) {
-      return resolve(results.get(this)[0]);
+    let primaryModel = opts.resultModels[0] || this;
+    if (typeof primaryModel === 'string') {
+      primaryModel = this.getModel(primaryModel);
     }
-    return resolve(results.get(this));
+    if (opts.oneResult) {
+      return resolve(results.get(primaryModel)[0]);
+    }
+    return resolve(results.get(primaryModel));
   }
 
 }).call(Model.prototype);
@@ -343,5 +363,8 @@ module.exports = {
   EmptyResult,
   getModel: function getModel(name) {
     return cached_models[name];
+  },
+  TVP: function TVP(types) {
+    return {type: 'TVP', types};
   }
 };

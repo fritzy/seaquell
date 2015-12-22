@@ -16,6 +16,9 @@ Seaquell.setConnection(config.mssql);
 const Test = new Seaquell.Model({
   FirstName: {alias: 'FIRST_NAME'},
   LastName: {alias: 'LAST_NAME'},
+}, {
+  name: 'Test',
+  cache: true
 });
 
 Test.mapProcedure({
@@ -83,6 +86,17 @@ const p5 = Test.mapStatement({
   query: (args) => `SELECT 'Billy' AS FirstName, 'Bob' AS LastName`
 });
 
+const p6 = Test.mapProcedure({
+  static: true,
+  name: 'customtype',
+  args: {
+    id: mssql.BigInt,
+    SomeSub: Seaquell.TVP([
+      ['a', mssql.NVarChar(50)],
+      ['b', mssql.NVarChar(50)]
+    ])
+  },
+});
 
 Test.mapQuery({
   static: true,
@@ -111,24 +125,36 @@ lab.experiment('testing functions', () => {
     Test.getDB((db) => {
       const request = new mssql.Request(db);
       request.multiple = true;
-      const q1 =request.query(`
-IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'multiselect') AND type IN (N'P', N'PC'))
-DROP PROCEDURE multiselect`);
-      const r2 = new mssql.Request(db);
-      const q2 = r2.query(`
-CREATE PROCEDURE multiselect
+      request.query(`IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'multiselect') AND type IN (N'P', N'PC')) DROP PROCEDURE multiselect`).then(() => {
+        return request.query(`CREATE PROCEDURE multiselect
 AS
-  CREATE TABLE #TempTest (FIRST_NAME VARCHAR(50), LAST_NAME VARCHAR(50));
-  INSERT INTO #TempTest (FIRST_NAME, LAST_NAME) VALUES ('Nathan', 'Fritz'), ('Robert', 'Robles'), ('Cow', 'Town');
-  SELECT * FROM #TempTest;
-`);
-      Promise.all([q1, q2]).then(() => {
+CREATE TABLE #TempTest (FIRST_NAME VARCHAR(50), LAST_NAME VARCHAR(50));
+INSERT INTO #TempTest (FIRST_NAME, LAST_NAME) VALUES ('Nathan', 'Fritz'), ('Robert', 'Robles'), ('Cow', 'Town');
+SELECT * FROM #TempTest;`);
+      }).then(() => {
         done();
-      }).catch((e) => {
-        console.log(e);
-        console.log(e.stack);
+      }).catch(done);
+    });
+  });
+  
+  lab.test('create user defined table proc', (done) => {
+    Test.getDB((db) => {
+      const request = new mssql.Request(db);
+      request.multiple = true;
+      request.query(`IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'customtype') AND type IN (N'P', N'PC')) DROP PROCEDURE customtype`).then(() => {
+      }).then(() => {
+        return request.query(`IF EXISTS (SELECT * FROM sys.types WHERE is_user_defined=1 AND name='TestUserType') DROP TYPE TestUserType`);
+      }).then(() => {
+        return request.query(`CREATE TYPE TestUserType AS TABLE (a NVarChar(50), b NVarChar(50))`);
+      }).then(() => {
+        return request.query(`CREATE PROCEDURE customtype
+@id BigInt,
+@SomeSub TestUserType READONLY
+AS
+SELECT a AS FIRST_NAME, b AS LAST_NAME FROM @SomeSub;`);
+      }).then(() => {
         done();
-      });
+      }).catch(done);
     });
   });
   
@@ -186,9 +212,9 @@ AS
       });
     });
   });
-  
+
   lab.test('loaded statements', (done) => {
-    Promise.all([p1, p2, p3, p4, p5]).then(() => {
+    Promise.all([p1, p2, p3, p4, p5, p6]).then(() => {
       done();
     }).catch((err) => {
       console.log(err.stack);
@@ -398,7 +424,51 @@ AS
       done();
     });
   });
+  
+  lab.test('custom type static', (done) => {
+    Test.customtype({id: 1, SomeSub: [{a: 'Billy', b: 'Bob',}, {a: 'Ham', b: 'Sammich'}]}).then((model) => {
+      expect(model[0].FirstName).to.equal('Billy');
+      expect(model[0].LastName).to.equal('Bob');
+      expect(model[1].FirstName).to.equal('Ham');
+      expect(model[1].LastName).to.equal('Sammich');
+      done();
+    }).catch(done);
+  });
+  
+  lab.test('custom type method', (done) => {
+    const HasSubType = new Seaquell.Model({
+      id: {},
+      SomeSub: {collection: 'UserType'}
+    });
+    const UserType = new Seaquell.Model({
+      a: {},
+      b: {}
+    }, {
+      name: 'UserType',
+      cache: true
+    });
 
+    HasSubType.mapProcedure({
+      static: false,
+      name: 'customtype',
+      args: {
+        id: mssql.BigInt,
+        SomeSub: Seaquell.TVP([
+          ['a', mssql.NVarChar(50)],
+          ['b', mssql.NVarChar(50)]
+        ])
+      },
+      resultModels: ['Test']
+    });
+    const model = HasSubType.create({id: 1, SomeSub: [{a: 'Billy', b: 'Bob',}, {a: 'Ham', b: 'Sammich'}]});
+    model.customtype().then((rmodel) => {
+      expect(rmodel[0].FirstName).to.equal('Billy');
+      expect(rmodel[0].LastName).to.equal('Bob');
+      expect(rmodel[1].FirstName).to.equal('Ham');
+      expect(rmodel[1].LastName).to.equal('Sammich');
+      done();
+    }).catch(done);
+  });
 
   lab.test('disconnect', (done) => {
     Test.getDB((db) => {
