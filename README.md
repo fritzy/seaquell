@@ -172,3 +172,5 @@ __return__: `undefined`
 __seaquell.getModel(name)__
 
 Returns the model named 'name';
+
+# Seaquell.TVP(types)

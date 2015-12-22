@@ -18,7 +18,7 @@
     "lab": "^8.0.0"
   },
   "scripts": {
-    "test": "lab -a code -c"
+    "test": "lab -a code -c -v"
   },
   "author": "Nathanael C. Fritz",
   "license": "MIT"

@@ -95,7 +95,7 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
       return this._mapInstanceQuery(opts);
     }
   };
-  
+
   this._mapStaticQuery = function mapStaticQuery(opts) {
     Model.prototype[opts.name] = function (args) {
       const promise = new Promise((resolve, reject) => {
@@ -110,7 +110,7 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
       return promise;
     }
   };
-  
+
   this._mapInstanceQuery = function mapInstanceQuery(opts) {
     const extension = {};
     const model = this;
@@ -311,7 +311,6 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
         return reject(new EmptyResult);
       } else {
         recordsets[0] = recordsets[0].splice(0, 1);
-        //return resolve(this.create(recordsets[0][0]));
       }
     }
     const results = new Map();

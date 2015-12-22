@@ -64,13 +64,13 @@ const p2 = Test.mapStatement({
   query: (args) => `SELECT @FirstName AS FirstName, @LastName AS LastName, 'derp' AS hurr`
 });
 
-const p3 = Test.mapProcedure({
+Test.mapProcedure({
   static: true,
   name: 'multiselect',
   oneResult: false,
 });
 
-const p4 = Test.mapProcedure({
+Test.mapProcedure({
   static: true,
   name: 'getuno',
   args: {
@@ -79,14 +79,14 @@ const p4 = Test.mapProcedure({
   oneResult: true,
 });
 
-const p5 = Test.mapStatement({
+const p3 = Test.mapStatement({
   static: false,
   name: 'noargs',
   oneResult: true,
   query: (args) => `SELECT 'Billy' AS FirstName, 'Bob' AS LastName`
 });
 
-const p6 = Test.mapProcedure({
+Test.mapProcedure({
   static: true,
   name: 'customtype',
   args: {
@@ -162,26 +162,16 @@ SELECT a AS FIRST_NAME, b AS LAST_NAME FROM @SomeSub;`);
     Test.getDB((db) => {
       const request = new mssql.Request(db);
       request.multiple = true;
-      const q1 =request.query(`
-IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'getuno') AND type IN (N'P', N'PC'))
-DROP PROCEDURE getuno`);
-      q1.then(() => {
-        const r2 = new mssql.Request(db);
-        const q2 = r2.query(`
-  CREATE PROCEDURE getuno
+      request.query(`IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'getuno') AND type IN (N'P', N'PC')) DROP PROCEDURE getuno`).then(() => {
+        return request.query(`CREATE PROCEDURE getuno
     @LAST_NAME VARCHAR(50)
   AS
     CREATE TABLE #TempTest (FIRST_NAME VARCHAR(50), LAST_NAME VARCHAR(50));
     INSERT INTO #TempTest (FIRST_NAME, LAST_NAME) VALUES ('Nathan', 'Fritz'), ('Robert', 'Robles'), ('Cow', 'Town');
-    SELECT * FROM #TempTest WHERE LAST_NAME=@LAST_NAME;
-  `);
-        return q2;
-      }).then(done)
-      .catch((e) => {
-        console.log(e);
-        console.log(e.stack);
+    SELECT * FROM #TempTest WHERE LAST_NAME=@LAST_NAME;`);
+      }).then(() => {
         done();
-      });
+      }).catch(done);
     });
   });
   
@@ -189,36 +179,25 @@ DROP PROCEDURE getuno`);
     Test.getDB((db) => {
       const request = new mssql.Request(db);
       request.multiple = true;
-      const q1 =request.query(`
-IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'multiresult') AND type IN (N'P', N'PC'))
-DROP PROCEDURE multiresult`);
-      const r2 = new mssql.Request(db);
-      const q2 = r2.query(`
-CREATE PROCEDURE multiresult
+      request.query(`IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'multiresult') AND type IN (N'P', N'PC')) DROP PROCEDURE multiresult`).then(() => {
+      return request.query(`CREATE PROCEDURE multiresult
 AS
   CREATE TABLE #Name (id INT, first VARCHAR(50), last VARCHAR(50));
   CREATE TABLE #Item (name_id INT, name VARCHAR(50), weight INT);
   INSERT INTO #Name (id, first, last) VALUES (1, 'Nathan', 'Fritz'), (2, 'Robert', 'Robles'), (3, 'Cow', 'Town');
   INSERT INTO #Item (name_id, name, weight) VALUES (1, 'crowbar', 15), (1, 'lettuce', 1), (3, 'cow', 13), (3, 'hair', 0);
   SELECT * FROM #Name;
-  SELECT * FROM #Item;
-`);
-      Promise.all([q1, q2]).then(() => {
+  SELECT * FROM #Item;`);
+      }).then(() => {
         done();
-      }).catch((e) => {
-        console.log(e);
-        console.log(e.stack);
-        done();
-      });
+      }).catch(done);
     });
   });
 
   lab.test('loaded statements', (done) => {
-    Promise.all([p1, p2, p3, p4, p5, p6]).then(() => {
+    Promise.all([p1, p2, p3]).then(() => {
       done();
-    }).catch((err) => {
-      console.log(err.stack);
-    });
+    }).catch(done);
   });
 
   lab.test('loading stored procs', (done) => {
@@ -238,10 +217,7 @@ AS
   SELECT @LastName AS LastName, @FirstName AS FirstName;
 `)  }).then(() => {
         done();
-      }).catch((err) => {
-        console.log(err.stack);
-        done();
-      });
+      }).catch(done);
     });
   });
 
@@ -265,9 +241,7 @@ AS
       expect(results.FirstName).to.equal('Nathanael');
       expect(results.LastName).to.equal('Fritzer');
       done();
-    }).catch((e) => {
-      console.log(e.stack);
-    });
+    }).catch(done);
   });
 
   lab.test('static statement', (done) => {
@@ -278,10 +252,7 @@ AS
       expect(results.FirstName).to.equal('Nathan');
       expect(results.LastName).to.equal('Fritz');
       done();
-    }).catch((err) => {
-      console.log(err.stack);
-      done();
-    });
+    }).catch(done);
   });
 
   lab.test('instance statement', (done) => {
@@ -293,10 +264,7 @@ AS
       expect(results.FirstName).to.equal('Nathan');
       expect(results.LastName).to.equal('Fritz');
       done();
-    }).catch((err) => {
-      console.log(err.stack);
-      done();
-    });
+    }).catch(done);
   });
   
   lab.test('static query', (done) => {
@@ -307,10 +275,7 @@ AS
       expect(results.FirstName).to.equal('Nathan');
       expect(results.LastName).to.equal('Fritz');
       done();
-    }).catch((err) => {
-      console.log(err.stack);
-      done();
-    });
+    }).catch(done);
   });
 
   lab.test('instance query', (done) => {
