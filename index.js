@@ -157,11 +157,6 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
     const extension = {};
     const model = this;
     extension[opts.name] = function (args) {
-      /* $lab:coverage:off$ */
-      if (typeof args === 'undefined') {
-        args = {};
-      }
-      /* $lab:coverage:on$ */
       const input = this.toJSON();
       lodash.assign(input, args);
       const promise = new Promise((resolve, reject) => {
@@ -180,7 +175,7 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
       return reject(err);
     }
     if (opts.oneResult) {
-      if (recordset[0].length === 0) {
+      if (recordset.length === 0 || recordset[0].length === 0) {
         return reject(new EmptyResult);
       } else {
         return resolve(this.create(recordset[0]));
@@ -190,7 +185,7 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
     recordset.forEach((row) => {
       results.push(this.create(row));
     });
-    return resolve({results, returnValue});
+    return resolve(results);
   }
 
   this._prepare = function _prepare(opts) {
@@ -201,12 +196,6 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
           Object.keys(opts.args).forEach((arg) => {
             statement.input(arg, opts.args[arg]);
           });
-        }
-        if (opts.output) {
-          Object.keys(opts.output).forEach((arg) => {
-            statement.output(arg, opts.args[arg]);
-          });
-          statement.output(opts.output[0], opts.output[1]);
         }
         this._preparedStatements[opts.name] = statement;
         statement.prepare(opts.query(), (err) => {
@@ -237,7 +226,7 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
     if (opts.args) {
       Object.keys(opts.args).forEach((arg) => {
         let argdef = opts.args[arg];
-        if (argdef.hasOwnProperty('type') && argdef.type === 'TVP') {
+        if (argdef.hasOwnProperty('type') && argdef.type === 'TVP' && args.hasOwnProperty(arg)) {
           let tvp = new mssql.Table();
           argdef.types.forEach((mtype) => {
             tvp.columns.add(mtype[0], mtype[1]);
@@ -255,9 +244,6 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
           request.input(arg, opts.args[arg], args[arg]);
         }
       });
-    }
-    if (opts.output) {
-      request.output(opts.output[0], opts.output[1]);
     }
     return request;
   };
@@ -303,9 +289,13 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
   };
 
   this._procedureResults = function _procedureResults(opts, err, recordsets, returnValue, reject, resolve) {
+    //sending bad data to a procedure doesn't throw an error
+    //so I'm unsure how to make an error happen here
+    /* $lab:coverage:off$ */
     if (err) {
       return reject(err);
     }
+    /* $lab:coverage:on$ */
     if (opts.oneResult) {
       if (recordsets[0].length === 0) {
         return reject(new EmptyResult);
@@ -332,8 +322,8 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
           let lfield = factory.definition[field].local;
           let rfield = factory.definition[field].remote;
           let relFactory = this.getModel(factory.definition[field].collection || factory.definition[field].model);
-          (results.get(factory) || []).forEach( (local) => {
-            (results.get(relFactory) || []).forEach( (remote) => {
+          (results.get(factory)).forEach( (local) => {
+            (results.get(relFactory)).forEach( (remote) => {
               if (remote[rfield] == local[lfield]) {
                 local[field] = remote;
               }

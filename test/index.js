@@ -79,11 +79,24 @@ Test.mapProcedure({
   oneResult: true,
 });
 
+
 const p3 = Test.mapStatement({
   static: false,
   name: 'noargs',
   oneResult: true,
   query: (args) => `SELECT 'Billy' AS FirstName, 'Bob' AS LastName`
+});
+
+const p4 = Test.mapStatement({
+  static: true,
+  oneResult: true,
+  name: 'test2fail',
+  args: {
+    'FirstName': mssql.NVarChar(255),
+    'LastName': mssql.NVarChar(255),
+    'Age': mssql.Int
+  },
+  query: (args) => `SELECT @FirstName AS FirstName, @LastName AS LastName, @Age As Age`
 });
 
 Test.mapProcedure({
@@ -118,6 +131,21 @@ Test.mapQuery({
   name: 'badquery',
   query: (args, model) => `SELECT PJN ON '${model.FirstName}' AS FirstName, '${model.LastName}' AS LastName, 'derp' AS hurr`
 });
+
+Test.mapQuery({
+  static: true,
+  oneResult: false,
+  name: 'morethanone',
+  query: (args, model) => `select * from (values ('test-a1', 'test-a2'), ('test-b1', 'test-b2'), ('test-c1', 'test-c2')) x(FirstName, LastName)`
+});
+
+Test.mapQuery({
+  static: true,
+  oneResult: true,
+  name: 'getnone',
+  query: (args, model) => `select * from sys.types WHERE name='haaaaaybuddy'`
+});
+
   
 lab.experiment('testing functions', () => {
   
@@ -175,6 +203,23 @@ SELECT a AS FIRST_NAME, b AS LAST_NAME FROM @SomeSub;`);
     });
   });
   
+  lab.test('create get table proc2', (done) => {
+    Test.getDB((db) => {
+      const request = new mssql.Request(db);
+      request.multiple = true;
+      request.query(`IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'getuno2') AND type IN (N'P', N'PC')) DROP PROCEDURE getuno2`).then(() => {
+        return request.query(`CREATE PROCEDURE getuno2
+    @LAST_NAME VARCHAR(50)
+  AS
+    CREATE TABLE #TempTest (FIRST_NAME VARCHAR(50), LAST_NAME VARCHAR(50));
+    INSERT INTO #TempTest (FIRST_NAME, LAST_NAME) VALUES ('Nathan', 'Fritz'), ('Robert', 'Robles'), ('Cow', 'Town');
+    SELECT * FROM #TempTest WHERE LAST_NAME=@LAST_NAME;`);
+      }).then(() => {
+        done();
+      }).catch(done);
+    });
+  });
+  
   lab.test('create multiresults proc', (done) => {
     Test.getDB((db) => {
       const request = new mssql.Request(db);
@@ -195,7 +240,7 @@ AS
   });
 
   lab.test('loaded statements', (done) => {
-    Promise.all([p1, p2, p3]).then(() => {
+    Promise.all([p1, p2, p3, p4]).then(() => {
       done();
     }).catch(done);
   });
@@ -203,9 +248,8 @@ AS
   lab.test('loading stored procs', (done) => {
     Test.getDB((db) => {
       const request = new mssql.Request(db);
-      request.query(`
-IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'testproc') AND type IN (N'P', N'PC'))
-DROP PROCEDURE testproc;`).then(() => {
+      request.multiple = true;
+      request.query(`IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'testproc') AND type IN (N'P', N'PC')) DROP PROCEDURE testproc;`).then(() => {
         const request2 = new mssql.Request(db);
         return request2.batch(
 `
@@ -214,8 +258,8 @@ CREATE PROCEDURE testproc
   @LastName nvarchar(50)
 AS
   
-  SELECT @LastName AS LastName, @FirstName AS FirstName;
-`)  }).then(() => {
+SELECT @LastName AS LastName, @FirstName AS FirstName;`)
+  }).then(() => {
         done();
       }).catch(done);
     });
@@ -316,7 +360,7 @@ AS
     }).catch(done);
   });
 
-  lab.test('join multi', (done) => {
+  lab.test('join multi collection', (done) => {
     const Item = new Seaquell.Model({
       'name_id': {},
       'name': {},
@@ -340,6 +384,38 @@ AS
       expect(names[2].items[1].name).to.equal('hair');
       done();
     }).catch(done);
+  });
+
+  lab.test('join multi model', (done) => {
+    const Item = new Seaquell.Model({
+      'name_id': {},
+      'name': {},
+      'weight': {}
+    }, {name: 'jm_item2', cache: true});
+    const Name = new Seaquell.Model({
+      'id': {},
+      'first': {},
+      'last': {},
+      'item': { model: 'jm_item2', local: 'id', 'remote': 'name_id' }
+    }, {name: 'rm_name2', cache: true});
+    Name.mapProcedure({
+      static: true,
+      name: 'multiresult',
+      oneResult: false,
+      resultModels: ['', 'jm_item2']
+    });
+    Name.multiresult()
+    .then((names) => {
+      expect(names[0].item.name).to.equal('lettuce');
+      expect(names[2].item.name).to.equal('hair');
+      done();
+    }).catch(done);
+  });
+
+  lab.test('get model', (done) => {
+    const model = Seaquell.getModel('Test');
+    expect(model.options.name).to.equal('Test');
+    done();
   });
 
   lab.test('bad MapQuery', (done) => {
@@ -380,6 +456,53 @@ AS
     });
   });
 
+  lab.test('processArgs static', (done) => {
+    Test.mapProcedure({
+      static: true,
+      name: 'getuno2',
+      args: {
+        'LAST_NAME': mssql.NVarChar(50)
+      },
+      processArgs: function (args, model) {
+        if (args.last) {
+          args.LAST_NAME = args.last;
+          delete args.last;
+        }
+        return args;
+      },
+      oneResult: true,
+    });
+    Test.getuno2({last: 'Fritz'}).then((results) => {
+      expect(results.FirstName).to.equal('Nathan');
+      expect(results.LastName).to.equal('Fritz');
+      done();
+    }).catch(done);
+  });
+
+  lab.test('processArgs instance', (done) => {
+    Test.mapProcedure({
+      static: false,
+      name: 'getuno2',
+      args: {
+        'LAST_NAME': mssql.NVarChar(50)
+      },
+      processArgs: function (args, model) {
+        if (args.last) {
+          args.LAST_NAME = args.last;
+          delete args.last;
+        }
+        return args;
+      },
+      oneResult: true,
+    });
+    let test = Test.create({});
+    test.getuno2({last: 'Fritz'}).then((results) => {
+      expect(results.FirstName).to.equal('Nathan');
+      expect(results.LastName).to.equal('Fritz');
+      done();
+    }).catch(done);
+  });
+
   lab.test('no args statement', (done) => {
     const test = Test.create();
     test.noargs()
@@ -387,7 +510,7 @@ AS
       expect(model.FirstName).to.equal('Billy');
       expect(model.LastName).to.equal('Bob');
       done();
-    });
+    }).catch(done);
   });
   
   lab.test('custom type static', (done) => {
@@ -398,6 +521,23 @@ AS
       expect(model[1].LastName).to.equal('Sammich');
       done();
     }).catch(done);
+  });
+
+  lab.test('more than one result from query', (done) => {
+    Test.morethanone().then((model) => {
+      expect(model[0].FirstName).to.equal('test-a1');
+      expect(model[1].FirstName).to.equal('test-b1');
+      done();
+    }).catch(done);
+  });
+  
+  lab.test('get no results on oneResult:true', (done) => {
+    Test.getnone().then((model) => {
+      done('Should Have Errored');
+    }).catch((err) => {
+      expect(err).to.be.an.instanceof(Seaquell.EmptyResult);
+      done();
+    });
   });
   
   lab.test('custom type method', (done) => {
@@ -425,7 +565,7 @@ AS
       },
       resultModels: ['Test']
     });
-    const model = HasSubType.create({id: 1, SomeSub: [{a: 'Billy', b: 'Bob',}, {a: 'Ham', b: 'Sammich'}]});
+    const model = HasSubType.create({id: 1, SomeSub: [{a: 'Billy', b: 'Bob'}, {a: 'Ham', b: 'Sammich'}]});
     model.customtype().then((rmodel) => {
       expect(rmodel[0].FirstName).to.equal('Billy');
       expect(rmodel[0].LastName).to.equal('Bob');
@@ -435,6 +575,27 @@ AS
     }).catch(done);
   });
 
+  lab.test('bad prepared statement', (done) => {
+    Test.mapStatement({
+      static: false,
+      name: 'noargs',
+      oneResult: true,
+      query: (args) => `SERECT 'Billy' AS FirstName, 'Bob' AS LastName`
+    }).then(() => {
+      done(new Error('there should have been an error'));
+    }).catch((err) => {
+      done();
+    });
+  });
+
+  lab.test('bad arguments in statement', (done) => {
+    Test.test2fail({FirstName: 'Nathan', LastName: 'Fritz', Age: 'Thirty-Four'}).then(() => {
+      done(new Error('should error out'));
+    }).catch((error) => {
+      done();
+    });
+  });
+  
   lab.test('disconnect', (done) => {
     Test.getDB((db) => {
       Test.unprepare('teststate').then(() => {
