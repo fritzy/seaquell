@@ -11,7 +11,7 @@ const methodValidators = {
   mapProcedure: Joi.object({
     static: Joi.boolean().default(false),
     name: Joi.string().required(),
-    args: Joi.object().unknown(),
+    args: Joi.array(Joi.array().length(2)),
     output: Joi.array().min(2).max(2),
     oneResult: Joi.boolean().default(false),
     processArgs: Joi.func(),
@@ -20,7 +20,7 @@ const methodValidators = {
   mapStatement: Joi.object({
     static: Joi.boolean().default(false),
     name: Joi.string().required(),
-    args: Joi.object().unknown(),
+    args: Joi.array(Joi.array().length(2)),
     output: Joi.object().unknown(),
     query: Joi.func().required(),
     oneResult: Joi.boolean().default(false)
@@ -134,6 +134,7 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
     if (optsValid.error) {
       throw optsValid.error;
     }
+    opts.args = opts.args || [];
     if (opts.static) {
       return this._mapStaticStatement(opts);
     } else {
@@ -192,11 +193,9 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
     return new Promise((resolve, reject) => {
       this.getDB((db) => {
         const statement = new mssql.PreparedStatement(db);
-        if (opts.args) {
-          Object.keys(opts.args).forEach((arg) => {
-            statement.input(arg, opts.args[arg]);
-          });
-        }
+        opts.args.forEach((arg) => {
+          statement.input(arg[0], arg[1]);
+        });
         this._preparedStatements[opts.name] = statement;
         statement.prepare(opts.query(), (err) => {
           if (err) {
@@ -213,6 +212,7 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
     if (optsValid.error) {
       throw optsValid.error;
     }
+    opts.args = opts.args || [];
     opts.resultModels = opts.resultModels || [this];
     if (opts.static) {
       return this.mapStaticProc(opts);
@@ -223,28 +223,27 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
 
   this._makeRequest = function (db, args, opts) {
     const request = new mssql.Request(db);
-    if (opts.args) {
-      Object.keys(opts.args).forEach((arg) => {
-        let argdef = opts.args[arg];
-        if (argdef.hasOwnProperty('type') && argdef.type === 'TVP' && args.hasOwnProperty(arg)) {
-          let tvp = new mssql.Table();
+    opts.args.forEach((arg) => {
+      const argdef = arg[1];
+      const field = arg[0];
+      if (argdef.hasOwnProperty('type') && argdef.type === 'TVP' && args.hasOwnProperty(field)) {
+        let tvp = new mssql.Table();
+        argdef.types.forEach((mtype) => {
+          tvp.columns.add(mtype[0], mtype[1]);
+        });
+        args[field].forEach((argrow) => {
+          let row = [];
           argdef.types.forEach((mtype) => {
-            tvp.columns.add(mtype[0], mtype[1]);
+            let col = mtype[0];
+            row.push(argrow[col]);
           });
-          args[arg].forEach((argrow) => {
-            let row = [];
-            argdef.types.forEach((mtype) => {
-              let col = mtype[0];
-              row.push(argrow[col]);
-            });
-            tvp.rows.add.apply(tvp.rows, row);
-          });
-          request.input(arg, tvp);
-        } else {
-          request.input(arg, opts.args[arg], args[arg]);
-        }
-      });
-    }
+          tvp.rows.add.apply(tvp.rows, row);
+        });
+        request.input(field, tvp);
+      } else {
+        request.input(field, argdef, args[field]);
+      }
+    });
     return request;
   };
 

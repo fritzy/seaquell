@@ -25,10 +25,10 @@ Test.mapProcedure({
   static: true,
   name: 'testproc',
   oneResult: true,
-  args: {
-    'FirstName': mssql.NVarChar(255),
-    'LastName': mssql.NVarChar(255)
-  }
+  args: [
+    ['FirstName', mssql.NVarChar(255)],
+    ['LastName', mssql.NVarChar(255)]
+  ]
 });
 
 
@@ -36,20 +36,20 @@ Test.mapProcedure({
   static: false,
   oneResult: true,
   name: 'testproc',
-  args: {
-    'FirstName': mssql.NVarChar(255),
-    'LastName': mssql.NVarChar(255)
-  }
+  args: [
+    ['FirstName', mssql.NVarChar(255)],
+    ['LastName', mssql.NVarChar(255)]
+  ]
 });
 
 const p1 = Test.mapStatement({
   static: true,
   oneResult: true,
   name: 'teststate',
-  args: {
-    'FirstName': mssql.NVarChar(255),
-    'LastName': mssql.NVarChar(255)
-  },
+  args: [
+    ['FirstName', mssql.NVarChar(255)],
+    ['LastName', mssql.NVarChar(255)]
+  ],
   query: (args) => `SELECT @FirstName AS FirstName, @LastName AS LastName, 'derp' AS hurr`
 });
 
@@ -57,10 +57,10 @@ const p2 = Test.mapStatement({
   static: false,
   oneResult: true,
   name: 'teststate',
-  args: {
-    'FirstName': mssql.NVarChar(255),
-    'LastName': mssql.NVarChar(255)
-  },
+  args: [
+    ['FirstName', mssql.NVarChar(255)],
+    ['LastName', mssql.NVarChar(255)]
+  ],
   query: (args) => `SELECT @FirstName AS FirstName, @LastName AS LastName, 'derp' AS hurr`
 });
 
@@ -73,9 +73,9 @@ Test.mapProcedure({
 Test.mapProcedure({
   static: true,
   name: 'getuno',
-  args: {
-    'LAST_NAME': mssql.NVarChar(50)
-  },
+  args: [
+    ['LAST_NAME', mssql.NVarChar(50)]
+  ],
   oneResult: true,
 });
 
@@ -91,24 +91,24 @@ const p4 = Test.mapStatement({
   static: true,
   oneResult: true,
   name: 'test2fail',
-  args: {
-    'FirstName': mssql.NVarChar(255),
-    'LastName': mssql.NVarChar(255),
-    'Age': mssql.Int
-  },
+  args: [
+    ['FirstName', mssql.NVarChar(255)],
+    ['LastName', mssql.NVarChar(255)],
+    ['Age', mssql.Int]
+  ],
   query: (args) => `SELECT @FirstName AS FirstName, @LastName AS LastName, @Age As Age`
 });
 
 Test.mapProcedure({
   static: true,
   name: 'customtype',
-  args: {
-    id: mssql.BigInt,
-    SomeSub: Seaquell.TVP([
+  args: [
+    ['id', mssql.BigInt],
+    ['SomeSub', Seaquell.TVP([
       ['a', mssql.NVarChar(50)],
       ['b', mssql.NVarChar(50)]
-    ])
-  },
+    ])]
+  ],
 });
 
 Test.mapQuery({
@@ -414,7 +414,6 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
 
   lab.test('get model', (done) => {
     const model = Seaquell.getModel('Test');
-    expect(model.options.name).to.equal('Test');
     done();
   });
 
@@ -460,9 +459,9 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
     Test.mapProcedure({
       static: true,
       name: 'getuno2',
-      args: {
-        'LAST_NAME': mssql.NVarChar(50)
-      },
+      args: [
+        ['LAST_NAME', mssql.NVarChar(50)]
+      ],
       processArgs: function (args, model) {
         if (args.last) {
           args.LAST_NAME = args.last;
@@ -483,9 +482,9 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
     Test.mapProcedure({
       static: false,
       name: 'getuno2',
-      args: {
-        'LAST_NAME': mssql.NVarChar(50)
-      },
+      args: [
+        ['LAST_NAME', mssql.NVarChar(50)]
+      ],
       processArgs: function (args, model) {
         if (args.last) {
           args.LAST_NAME = args.last;
@@ -556,13 +555,13 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
     HasSubType.mapProcedure({
       static: false,
       name: 'customtype',
-      args: {
-        id: mssql.BigInt,
-        SomeSub: Seaquell.TVP([
+      args: [
+        ['id', mssql.BigInt],
+        ['SomeSub', Seaquell.TVP([
           ['a', mssql.NVarChar(50)],
           ['b', mssql.NVarChar(50)]
-        ])
-      },
+        ])]
+      ],
       resultModels: ['Test']
     });
     const model = HasSubType.create({id: 1, SomeSub: [{a: 'Billy', b: 'Bob'}, {a: 'Ham', b: 'Sammich'}]});
