@@ -203,6 +203,21 @@ SELECT a AS FIRST_NAME, b AS LAST_NAME FROM @SomeSub;`);
     });
   });
   
+  lab.test('create select from value', (done) => {
+    Test.getDB((db) => {
+      const request = new mssql.Request(db);
+      request.multiple = true;
+      request.query(`IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'getselect') AND type IN (N'P', N'PC')) DROP PROCEDURE getselect`).then(() => {
+        return request.query(`CREATE PROCEDURE getselect
+    @firstName VARCHAR(50)
+  AS
+    SELECT @firstName AS firstName;`);
+      }).then(() => {
+        done();
+      }).catch(done);
+    });
+  });
+  
   lab.test('create get table proc2', (done) => {
     Test.getDB((db) => {
       const request = new mssql.Request(db);
@@ -687,6 +702,45 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
     }).catch((error) => {
       done();
     });
+  });
+
+  lab.test('inDB outDB processor', (done) => {
+      const Model = new Seaquell.Model({
+          firstName: {
+              processors: {
+                  fromDB: function (value) {
+                      return value.replace('-', ' ');
+                  },
+                  toDB: function (value) {
+                      return value.replace(' ', '_') + '-x';
+                  },
+              }
+          }
+      });
+    Model.mapQuery({
+      static: true,
+      oneResult: false,
+      name: 'testOut',
+      query: (args, model) => `select * from (values ('test-a1'), ('test-b1'), ('test-c1')) x(firstName)`
+    });
+    Model.mapProcedure({
+      static: false,
+      oneResult: true,
+      name: 'getselect',
+      args: [
+        ['firstName', mssql.NVarChar(255)],
+      ]
+    });
+    Model.testOut().then((models) => {
+      expect(models[0].firstName).to.equal('test a1');
+      expect(models[1].firstName).to.equal('test b1');
+      expect(models[2].firstName).to.equal('test c1');
+      return models[0].getselect();
+    }).then((model) => {
+      expect(model.firstName).to.equal('test_a1 x');
+      done();
+    }).catch(done);
+
   });
   
   lab.test('disconnect', (done) => {

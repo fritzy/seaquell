@@ -158,7 +158,7 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
     const extension = {};
     const model = this;
     extension[opts.name] = function (args) {
-      const input = this.toJSON();
+      const input = this.toJSON({processors: ['toDB']});
       lodash.assign(input, args);
       const promise = new Promise((resolve, reject) => {
         model._preparedStatements[opts.name].execute(input, (err, recordset, returnValue) => {
@@ -179,12 +179,12 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
       if (recordset.length === 0 || recordset[0].length === 0) {
         return reject(new EmptyResult);
       } else {
-        return resolve(this.create(recordset[0]));
+        return resolve(this.create(recordset[0], {processors: ['fromDB']}));
       }
     }
     const results = [];
     recordset.forEach((row) => {
-      results.push(this.create(row));
+      results.push(this.create(row, {processors: ['fromDB']}));
     });
     return resolve(results);
   }
@@ -270,7 +270,7 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
     const model = this;
     extension[opts.name] = function (args) {
       args = args || {};
-      args = _.extend(this.toJSON(), args);
+      args = _.extend(this.toJSON({processors: ['toDB']}), args);
       if (typeof opts.processArgs === 'function') {
         args = opts.processArgs(args, this);
       }
@@ -312,7 +312,7 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
       }
       results.set(model, []);
       rs.forEach((row) => {
-        results.get(model).push(model.create(row));
+        results.get(model).push(model.create(row, {processors: ['fromDB']}));
       });
     }
     if (results.length > opts.resultModels.length) {

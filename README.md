@@ -84,7 +84,9 @@ You can set the model option of `mssql` for individual models to have different 
 
 ## VeryModel extensions
 
-The fields that have a sub `collection` or sub `model` can also include the `remote` and `local` attributes to indicate how resulting objects should be joined into the parent model. Used in conjunction with `resultModels` to map the resultsets back to the right Model.
+* The fields that have a sub `collection` or sub `model` can also include the `remote` and `local` attributes to indicate how resulting objects should be joined into the parent model. Used in conjunction with `resultModels` to map the resultsets back to the right Model.
+* The custom processor `fromDB` is called when models are being created from the db results.
+* The custom processor `toDB` is called when model instances are used as input for stored procs.
 
 ### Example
 
