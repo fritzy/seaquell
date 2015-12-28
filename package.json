@@ -1,6 +1,6 @@
 {
   "name": "seaquell",
-  "version": "0.15.0",
+  "version": "0.15.1",
   "description": "A Reverse ORM for MS SQL",
   "main": "index.js",
   "repository": {
