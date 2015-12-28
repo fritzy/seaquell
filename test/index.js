@@ -211,6 +211,7 @@ SELECT a AS FIRST_NAME, b AS LAST_NAME FROM @SomeSub;`);
         return request.query(`CREATE PROCEDURE getselect
     @firstName VARCHAR(50)
   AS
+    SELECT @firstName AS firstName;
     SELECT @firstName AS firstName;`);
       }).then(() => {
         done();
@@ -725,7 +726,7 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
     });
     Model.mapProcedure({
       static: false,
-      oneResult: true,
+      oneResult: false,
       name: 'getselect',
       args: [
         ['firstName', mssql.NVarChar(255)],
@@ -737,7 +738,7 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
       expect(models[2].firstName).to.equal('test c1');
       return models[0].getselect();
     }).then((model) => {
-      expect(model.firstName).to.equal('test_a1 x');
+      expect(model[0].firstName).to.equal('test_a1 x');
       done();
     }).catch(done);
 

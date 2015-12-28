@@ -10,7 +10,7 @@
   "dependencies": {
     "mssql": "^2.6.2",
     "underscore": "^1.8.3",
-    "verymodel": "^3.4.0"
+    "verymodel": "^3.4.1"
   },
   "devDependencies": {
     "code": "^2.0.1",
