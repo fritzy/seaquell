@@ -315,14 +315,17 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
         results.get(model).push(model.create(row));
       });
     }
+    if (results.length > opts.resultModels.length) {
+      throw Error(`Number of results sets is greater than the number of resultModels for ${opts.name}`);
+    }
     for (let factory of results.keys()) {
       for (let field of factory.fields) {
         if (factory.definition[field].hasOwnProperty('remote')) {
           let lfield = factory.definition[field].local;
           let rfield = factory.definition[field].remote;
           let relFactory = this.getModel(factory.definition[field].collection || factory.definition[field].model);
-          (results.get(factory)).forEach( (local) => {
-            (results.get(relFactory)).forEach( (remote) => {
+          (results.get(factory) || []).forEach( (local) => {
+            (results.get(relFactory) || []).forEach( (remote) => {
               if (remote[rfield] == local[lfield]) {
                 local[field] = remote;
               }
@@ -354,5 +357,6 @@ module.exports = {
   },
   TVP: function TVP(types) {
     return {type: 'TVP', types};
-  }
+  },
+  Mssql: mssql
 };

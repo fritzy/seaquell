@@ -238,6 +238,100 @@ AS
       }).catch(done);
     });
   });
+  
+  lab.test('create super multiresults proc', (done) => {
+    Test.getDB((db) => {
+      const request = new mssql.Request(db);
+      request.multiple = true;
+      request.query(`IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'manyresults') AND type IN (N'P', N'PC')) DROP PROCEDURE manyresults`).then(() => {
+      return request.query(`CREATE PROCEDURE manyresults
+@inputid BigInt
+AS
+  SELECT * FROM (VALUES (1, 'Nathan Fritz')) x(id, name);
+  SELECT * FROM (VALUES (1, 1, 'Derping for Dummies'), (2, 1, 'Predicting the Future')) x(id, person_id, title);
+  SELECT * FROM (VALUES (1, 1, 'Subaru', 'BRZ'), (2, 1, 'Subaru', 'Outback'), (3, 1, 'Dodge', 'Durango')) x(id, person_id, make, model);
+  SELECT * FROM (VALUES (1, 1, 'Zips', 'Frier'), (2, 1, 'Watches Watches Watches', 'Clerk')) x(id, person_id, company, title);
+  SELECT * FROM (VALUES (1, 1, 'Bert', '02-10-2005')) x(id, person_id, name, dob);
+  SELECT * FROM (VALUES (1, 1, 'Fast'), (2, 1, 'Furious'), (3, 1, 'Loud')) x(id, person_id, name);
+`);
+      }).then(() => {
+        done();
+      }).catch(done);
+    });
+  });
+
+  lab.test('map many result sets', (done) => {
+    const Person = new Seaquell.Model({
+      id: {},
+      name: {},
+      books: {collection: 'Book', local: 'id', remote: 'person_id'},
+      cars: {collection: 'Car', local: 'id', remote: 'person_id'},
+      jobs: {collection: 'Job', local: 'id', remote: 'person_id'},
+      children: {collection: 'Child', local: 'id', remote: 'person_id'},
+      traits: {collection: 'Trait', local: 'id', remote: 'person_id'},
+    }, {
+      name: 'Person',
+      cache: true
+    });
+    const Book = new Seaquell.Model({
+      id: {},
+      person_id: {},
+      title: {},
+    }, {
+      name: 'Book',
+      cache: true
+    });
+    const Car = new Seaquell.Model({
+      id: {},
+      person_id: {},
+      make: {},
+      model: {}
+    }, {
+      name: 'Car',
+      cache: true
+    });
+    const Job = new Seaquell.Model({
+      id: {},
+      person_id: {},
+      company: {},
+      title: {}
+    }, {
+      name: 'Job',
+      cache: true
+    });
+    const Child = new Seaquell.Model({
+      id: {},
+      person_id: {},
+      name: {},
+      dob: {}
+    }, {
+      name: 'Child',
+      cache: true
+    });
+    const Trait = new Seaquell.Model({
+      id: {},
+      person_id: {},
+      name: {}
+    }, {
+      name: 'Trait',
+      cache: true
+    });
+    Person.mapProcedure({
+      static: true,
+      name: 'manyresults',
+      args: [['inputid', mssql.BigInt]],
+      oneResult: true,
+      resultModels: ['Person', 'Book', 'Car', 'Job', 'Child', 'Trait']
+    });
+    Person.manyresults({inputid: 7}).then((person) => {
+      expect(person.jobs[1].company).to.equal('Watches Watches Watches');
+      expect(person.children[0].name).to.equal('Bert');
+      expect(person.cars[2].make).to.equal('Dodge');
+      expect(person.traits.length).to.equal(3);
+      done();
+    }).catch(done);
+  });
+
 
   lab.test('loaded statements', (done) => {
     Promise.all([p1, p2, p3, p4]).then(() => {
