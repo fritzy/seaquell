@@ -226,19 +226,21 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
     opts.args.forEach((arg) => {
       const argdef = arg[1];
       const field = arg[0];
-      if (argdef.hasOwnProperty('type') && argdef.type === 'TVP' && args.hasOwnProperty(field)) {
+      if (argdef.hasOwnProperty('type') && argdef.type === 'TVP') {
         let tvp = new mssql.Table();
         argdef.types.forEach((mtype) => {
           tvp.columns.add(mtype[0], mtype[1]);
         });
-        args[field].forEach((argrow) => {
-          let row = [];
-          argdef.types.forEach((mtype) => {
-            let col = mtype[0];
-            row.push(argrow[col]);
+        if (Array.isArray(args[field])) {
+          args[field].forEach((argrow) => {
+            let row = [];
+            argdef.types.forEach((mtype) => {
+              let col = mtype[0];
+              row.push(argrow[col]);
+            });
+            tvp.rows.add.apply(tvp.rows, row);
           });
-          tvp.rows.add.apply(tvp.rows, row);
-        });
+        }
         request.input(field, tvp);
       } else {
         request.input(field, argdef, args[field]);
