@@ -276,6 +276,32 @@ AS
     });
   });
 
+  lab.test('loaded statements', (done) => {
+    Promise.all([p1, p2, p3, p4]).then(() => {
+      done();
+    }).catch(done);
+  });
+
+  lab.test('loading stored procs', (done) => {
+    Test.getDB((db) => {
+      const request = new mssql.Request(db);
+      request.multiple = true;
+      request.query(`IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'testproc') AND type IN (N'P', N'PC')) DROP PROCEDURE testproc;`).then(() => {
+        const request2 = new mssql.Request(db);
+        return request2.batch(
+`
+CREATE PROCEDURE testproc
+  @FirstName nvarchar(50),
+  @LastName nvarchar(50)
+AS
+  
+SELECT @LastName AS LastName, @FirstName AS FirstName;`)
+  }).then(() => {
+        done();
+      }).catch(done);
+    });
+  });
+
   lab.test('map many result sets', (done) => {
     const Person = new Seaquell.Model({
       id: {},
@@ -348,30 +374,19 @@ AS
     }).catch(done);
   });
 
-
-  lab.test('loaded statements', (done) => {
-    Promise.all([p1, p2, p3, p4]).then(() => {
+  lab.test('bad mapping of result sets', (done) => {
+    const Person = Seaquell.getModel('Person');
+    Person.mapProcedure({
+      static: true,
+      name: 'manyresults',
+      args: [['inputid', mssql.BigInt]],
+      oneResult: true,
+      resultModels: ['Person', 'Car', 'Job', 'Child', 'Trait']
+    });
+    Person.manyresults({inputid: 7}).then((person) => {
+      done(new Error('should have thrown'));
+    }).catch((e) => {
       done();
-    }).catch(done);
-  });
-
-  lab.test('loading stored procs', (done) => {
-    Test.getDB((db) => {
-      const request = new mssql.Request(db);
-      request.multiple = true;
-      request.query(`IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'testproc') AND type IN (N'P', N'PC')) DROP PROCEDURE testproc;`).then(() => {
-        const request2 = new mssql.Request(db);
-        return request2.batch(
-`
-CREATE PROCEDURE testproc
-  @FirstName nvarchar(50),
-  @LastName nvarchar(50)
-AS
-  
-SELECT @LastName AS LastName, @FirstName AS FirstName;`)
-  }).then(() => {
-        done();
-      }).catch(done);
     });
   });
 
@@ -730,7 +745,8 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
       name: 'getselect',
       args: [
         ['firstName', mssql.NVarChar(255)],
-      ]
+      ],
+      resultModels: [Model, Model]
     });
     Model.testOut().then((models) => {
       expect(models[0].firstName).to.equal('test a1');
@@ -742,6 +758,14 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
       done();
     }).catch(done);
 
+  });
+
+  lab.test('null TVP', (done) => {
+    Test.customtype({id: 1}).then((model) => {
+      expect(Array.isArray(model)).to.equal(true);
+      expect(model.length).to.equal(0);
+      done();
+    }).catch(done);
   });
   
   lab.test('disconnect', (done) => {

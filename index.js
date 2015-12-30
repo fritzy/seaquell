@@ -304,6 +304,11 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
         recordsets[0] = recordsets[0].splice(0, 1);
       }
     }
+
+    if (recordsets.length > 1 && recordsets.length !== opts.resultModels.length) {
+      return reject(Error(`Number of results sets is not equal to the number of resultModels for ${opts.name}`));
+    }
+
     const results = new Map();
     for (let idx in recordsets) {
       const rs = recordsets[idx];
@@ -317,17 +322,14 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
         results.get(model).push(model.create(row, {processors: ['fromDB']}));
       });
     }
-    if (results.length > opts.resultModels.length) {
-      throw Error(`Number of results sets is greater than the number of resultModels for ${opts.name}`);
-    }
     for (let factory of results.keys()) {
       for (let field of factory.fields) {
         if (factory.definition[field].hasOwnProperty('remote')) {
           let lfield = factory.definition[field].local;
           let rfield = factory.definition[field].remote;
           let relFactory = this.getModel(factory.definition[field].collection || factory.definition[field].model);
-          (results.get(factory) || []).forEach( (local) => {
-            (results.get(relFactory) || []).forEach( (remote) => {
+          (results.get(factory)).forEach( (local) => {
+            (results.get(relFactory)).forEach( (remote) => {
               if (remote[rfield] == local[lfield]) {
                 local[field] = remote;
               }
