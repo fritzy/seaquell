@@ -11,8 +11,8 @@ const methodValidators = {
   mapProcedure: Joi.object({
     static: Joi.boolean().default(false),
     name: Joi.string().required(),
-    args: Joi.array(Joi.array().length(2)),
-    output: Joi.array().min(2).max(2),
+    args: Joi.array().items(Joi.array().length(2)),
+    output: Joi.array().length(2),
     oneResult: Joi.boolean().default(false),
     processArgs: Joi.func(),
     resultModels: Joi.array(Joi.string())
@@ -20,7 +20,7 @@ const methodValidators = {
   mapStatement: Joi.object({
     static: Joi.boolean().default(false),
     name: Joi.string().required(),
-    args: Joi.array(Joi.array().length(2)),
+    args: Joi.array().items(Joi.array().length(2)),
     output: Joi.object().unknown(),
     query: Joi.func().required(),
     oneResult: Joi.boolean().default(false)
