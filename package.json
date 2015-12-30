@@ -13,9 +13,9 @@
     "verymodel": "^3.5.0"
   },
   "devDependencies": {
-    "code": "^2.0.1",
+    "code": "^2.1.0",
     "getconfig": "^2.2.0",
-    "lab": "^8.0.0"
+    "lab": "^8.0.1"
   },
   "scripts": {
     "test": "lab -a code -c -v"
