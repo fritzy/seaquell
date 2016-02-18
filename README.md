@@ -9,6 +9,11 @@ Incoming and outgoing objects are validated and transformed by [Joi](https://npm
 
 The Model instance itself does not keep track of fields, you are expected to pass in an object to every function.
 
+You can auto-generate table methods (insert, update, delete, select). These methods use safe prepared statements, having auto-detected the table field types.
+You can also generate stored procs methods, which deal with the types automatically as well.
+
+You can always bind a raw query or prepared statement of your design as well.
+
 ## Example
 
 ```javascript
