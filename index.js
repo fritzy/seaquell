@@ -1,6 +1,9 @@
 "use strict";
 
-const verymodel = require('verymodel');
+const wadofgum = require('wadofgum');
+const wadofgumValidation = require('wadofgum-validation');
+const wadofgumProcess = require('wadofgum-process');
+
 const lodash = require('lodash');
 const assert = require('assert');
 const Joi = require('joi');
@@ -11,10 +14,8 @@ const methodValidators = {
   mapProcedure: Joi.object({
     static: Joi.boolean().default(false),
     name: Joi.string().required(),
-    args: Joi.array().items(Joi.array().length(2)),
     output: Joi.array().length(2),
     oneResult: Joi.boolean().default(false),
-    processArgs: Joi.func(),
     resultModels: Joi.array(Joi.string())
   }),
   mapStatement: Joi.object({
@@ -33,6 +34,62 @@ const methodValidators = {
   })
 };
 
+const dataTypes = {
+  bigint: mssql.BigInt,
+  numeric: mssql.Numeric,
+  bit: mssql.Bit,
+  smallint: mssql.SmallInt,
+  decimal: mssql.Decimal,
+  smallmoney: mssql.SmallMoney,
+  int: mssql.Int,
+  tinyint: mssql.TinyInt,
+  money: mssql.Money,
+  float: mssql.Float,
+  real: mssql.Real,
+  date: mssql.Date,
+  datetimeoffset: mssql.DateTimeOffset,
+  datetime2: mssql.DateTime2,
+  smalldatetime: mssql.SmallDateTime,
+  datetime: mssql.DateTime,
+  time: mssql.Time,
+  char: mssql.Char,
+  varchar: mssql.VarChar,
+  text: mssql.Text,
+  nchar: mssql.NChar,
+  nvarchar: mssql.NVarChar,
+  ntext: mssql.NText,
+  binary: mssql.Binary,
+  varbinary: mssql.VarBinary,
+  image: mssql.Image
+};
+
+const dataCall = {
+  decimal: ['NUMERIC_PRECISION', 'NUMERIC_SCALE'],
+  numeric: ['NUMERIC_PRECISION', 'NUMERIC_SCALE'],
+  char: ['CHARACTER_MAXIMUM_LENGTH'],
+  nchar: ['CHARACTER_MAXIMUM_LENGTH'],
+  varchar: ['CHARACTER_MAXIMUM_LENGTH'],
+  nvarchar: ['CHARACTER_MAXIMUM_LENGTH'],
+  time: ['NUMERIC_SCALE'],
+  datetime2: ['NUMERIC_SCALE'],
+  datetimeoffset: ['NUMERIC_SCALE'],
+  varbinary: ['CHARACTER_MAXIMUM_LENGTH']
+};
+
+const dataUserCall = {
+  decimal: ['precision', 'scale'],
+  numeric: ['precision', 'scale'],
+  char: ['max_length'],
+  nchar: ['max_length'],
+  varchar: ['max_length'],
+  nvarchar: ['max_length'],
+  time: ['scale'],
+  datetime2: ['scale'],
+  datetimeoffset: ['scale'],
+  varbinary: ['max_length']
+};
+
+
 function EmptyResult() {
   Error.apply(this, arguments);
   this.message = "EmptyResult";
@@ -40,162 +97,308 @@ function EmptyResult() {
 
 EmptyResult.prototype = Object.create(Error.prototype);
 
-let connection = null;
+let mssql_config;
+let mssql_conn;
 
 const cached_models = {};
 
-function Model() {
-  verymodel.VeryModel.apply(this, arguments);
+class Model extends wadofgum.mixin(wadofgumValidation, wadofgumProcess) {
 
-  if (this.options.name) {
-    cached_models[this.options.name] = this;
+  constructor (opts) {
+    super(opts);
+    this.map = this.map || {};
+
+    if (this.name) {
+      cached_models[this.name] = this;
+    }
+
+    this._preparedStatements = {};
+
+    this.getDB = () => {
+      return new Promise((resolve, reject) => {
+        if (!this.meta.mssql)  {
+          if (mssql_conn) {
+            this.meta.mssql = mssql_conn
+            return resolve(mssql_conn);
+          }
+          const conn = new mssql.Connection(mssql_config, (err) => {
+            /* $lab:coverage:off$ */
+            if (err) return reject(err);
+            /* $lab:coverage:on$ */
+            this.meta.mssql = mssql_conn = conn;
+            return resolve(this.meta.mssql);
+          });
+        } else {
+          return resolve(this.meta.mssql);
+        }
+      });
+    };
+
+    this.unprepare = function unprepare(name) {
+      return this._preparedStatements[name].unprepare();
+    };
+
+    this.mssql = null;
   }
 
-  this._preparedStatements = {};
-
-  /* $lab:coverage:off$ */
-  if (connection !== null) {
-    this.options.mssql = connection;
+  setTable (tname) {
+    return this.getDB()
+    .then((db) => {
+      const request = new mssql.Request(db);
+      return new Promise((resolve, reject) => {
+        request.query(`SELECT *
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME = '${tname}'`, (err, r) => {
+          /* $lab:coverage:off$ */
+          if (err) return reject(err);
+          /* $lab:coverage:on$ */
+          return resolve(r);
+        })
+      });
+    })
+    .then((r) => {
+      this.tableDefinition = {};
+      this.tableName = tname;
+      for (const row of r) {
+        if (typeof dataCall[row.DATA_TYPE] !== 'undefined') {
+          const callArgs = dataCall[row.DATA_TYPE].map((col) => {
+            return row[col];
+          });
+          this.tableDefinition[row.COLUMN_NAME] = dataTypes[row.DATA_TYPE].apply(mssql, callArgs);
+        } else {
+          this.tableDefinition[row.COLUMN_NAME] = dataTypes[row.DATA_TYPE];
+        }
+      }
+      this.createQueries();
+      return Promise.resolve();
+    });
   }
-  /* $lab:coverage:on$ */
 
-  this.getDB = (cb) => {
-    if (this.mssql === null)  {
-      const conn = new mssql.Connection(this.options.mssql, (err) => {
+  _getPreparedArgs(args) {
+    args = args || {};
+    return this.getDB()
+    .then((db) => {
+      const request = new mssql.PreparedStatement(db);
+      return this.validateAndProcess(args)
+      .then((args) => {
+        return Promise.resolve({ps: request, args});
+      });
+    })
+    .then((psAndArgs) => {
+      const args = psAndArgs.args;
+      const ps = psAndArgs.ps;
+      const keys = Object.keys(args);
+      for (const key of keys) {
+        ps.input(key, this.tableDefinition[key], args[key]);
+      }
+      return Promise.resolve({ps, args, keys});
+    });
+  }
+  
+  _queryTable(ps, args, query) {
+    return new Promise((resolve, reject) => {
+      ps.prepare(query, (err, recordset) => {
         /* $lab:coverage:off$ */
-        if (err) throw err;
+        if (err) {
+          return reject(err);
+        }
         /* $lab:coverage:on$ */
-        this.mssql = conn;
-        cb(conn);
+        resolve();
+      })
+    })
+    .then(() => {
+      return ps.execute(args)
+      .then((recordset) => {
+        ps.unprepare();
+        return Promise.resolve(recordset);
+      });
+    });
+  }
+
+  createQueries() {
+    this.select = (args) => {
+      return this._getPreparedArgs(args)
+      .then((psArgsKeys) => {
+        const args = psArgsKeys.args;
+        const ps = psArgsKeys.ps;
+        const keys = psArgsKeys.keys;
+        let query = `SELECT * FROM [${this.tableName}]`;
+        if (keys.length > 0) {
+          query += ` WHERE `
+          query += keys.map(key => `[${key}] = @${key}`).join(' AND ');
+        }
+        return this._queryTable(ps, args, query)
+        .then((recordset) => {
+          return Promise.resolve(this._queryResults({}, recordset));
+        });
+      });
+    };
+    
+    this.update = (args, where) => {
+      return this.validateAndProcess(where)
+      .then((where) => {
+        return this._getPreparedArgs(args)
+        .then((psArgsKeys) => {
+          const args = psArgsKeys.args;
+          const ps = psArgsKeys.ps;
+          const keys = psArgsKeys.keys;
+          const whereKeys = Object.keys(where);
+          for (const key of whereKeys) {
+            ps.input(key, this.tableDefinition[key], args[key]);
+          }
+          let query = `UPDATE [${this.tableName}] SET `;
+          query += keys.map(key => `[${key}] = @${key}`).join(', ');
+          query += ` WHERE `
+          query += whereKeys.map(key => `[${key}] = @${key}`).join(' AND ');
+          const combo = lodash.assign(args, where);
+          return this._queryTable(ps, combo, query)
+          .then((recordset) => {
+            return Promise.resolve();
+          });
+        });
+      });
+    };
+    
+    this.delete = (args) => {
+      return this._getPreparedArgs(args)
+      .then((psArgsKeys) => {
+        const args = psArgsKeys.args;
+        const ps = psArgsKeys.ps;
+        const keys = psArgsKeys.keys;
+        let query = `DELETE  FROM [${this.tableName}]`;
+        query += ` WHERE `
+        query += keys.map(key => `[${key}] = @${key}`).join(' AND ');
+        return this._queryTable(ps, args, query);
+      });
+    };
+
+    this.insert = (args) => {
+      return this._getPreparedArgs(args)
+      .then((psArgsKeys) => {
+        const args = psArgsKeys.args;
+        const ps = psArgsKeys.ps;
+        const keys = psArgsKeys.keys;
+        let query = `INSERT INTO [${this.tableName}] (
+          ${keys.join(', ')} ) VALUES (${keys.map(key => '@' + key).join(', ')})`;
+        return this._queryTable(ps, args, query);
+      });
+    }
+  }
+
+  validateAndProcess(obj, tags) {
+    if (this.schema) {
+      return this.validate(obj)
+      .then((obj2) => {
+        return this.process(obj2, tags);
       });
     } else {
-      cb(this.mssql);
+      return this.process(obj, tags);
     }
-  };
+  }
+  
+  getModel (mname) {
+    if (mname instanceof Model) {
+      return mname;
+    }
+    return cached_models[mname];
+  }
 
-  this.unprepare = function unprepare(name) {
-    return this._preparedStatements[name].unprepare();
-  };
-
-  this.mssql = null;
-}
-
-Model.prototype = Object.create(verymodel.VeryModel.prototype);
-
-(function () {
-
-  this.mapQuery = function mapStatement(opts) {
+  mapQuery (opts) {
     const optsValid = methodValidators.mapQuery.validate(opts);
     if (optsValid.error) {
       throw optsValid.error;
     }
-    if (opts.static) {
-      return this._mapStaticQuery(opts);
-    } else {
-      return this._mapInstanceQuery(opts);
-    }
-  };
+    return this._mapInstanceQuery(opts);
+  }
 
-  this._mapStaticQuery = function mapStaticQuery(opts) {
-    Model.prototype[opts.name] = function (args) {
-      const promise = new Promise((resolve, reject) => {
-        this.getDB((db) => {
-          const query = new mssql.Request(db);
-          const qstring = opts.query(args);
-          query.query(qstring, (err, recordset) => {
-            return this._queryResults(opts, err, recordset, undefined, resolve, reject);
-          });
-        });
-      });
-      return promise;
-    }
-  };
-
-  this._mapInstanceQuery = function mapInstanceQuery(opts) {
+  _mapInstanceQuery (opts) {
     const extension = {};
-    const model = this;
-    extension[opts.name] = function (args) {
-      const promise = new Promise((resolve, reject) => {
-        model.getDB((db) => {
-          const request = new mssql.Request(db);
-          const qstring = opts.query(args, this);
-          request.query(qstring, (err, recordset) => {
-            return model._queryResults(opts, err, recordset, undefined, resolve, reject);
+    this[opts.name] = (obj, args) => {
+
+      return this.getDB()
+      .then((db) => {
+
+        const request = new mssql.Request(db);
+
+        let pm;
+        if (!opts.static) {
+          pm = this.validateAndProcess(obj, 'toDB');
+        } else {
+          pm = Promise.resolve(obj);
+        }
+        return pm.then((input) => {
+          input = lodash.assign(input, args);
+          const qstring = opts.query(input, this);
+          return new Promise((resolve, reject) => {
+            request.query(qstring, (err, recordset) => {
+              /* $lab:coverage:off$ */
+              if (err) {
+                return reject(err);
+              }
+              /* $lab:coverage:on$ */
+              return resolve(this._queryResults(opts, recordset, undefined));
+            });
           });
         });
       });
-      return promise;
     }
-    this.extendModel(extension);
-  };
+  }
 
-  this.mapStatement = function mapStatement(opts) {
+  mapStatement (opts) {
     const optsValid = methodValidators.mapStatement.validate(opts);
     if (optsValid.error) {
       throw optsValid.error;
     }
     opts.args = opts.args || [];
-    if (opts.static) {
-      return this._mapStaticStatement(opts);
-    } else {
-      return this._mapInstanceStatement(opts);
-    }
-  };
+    return this._mapInstanceStatement(opts);
+  }
 
-  this._mapStaticStatement = function mapStaticStatement(opts) {
-    Model.prototype[opts.name] = function (args) {
-      const promise = new Promise((resolve, reject) => {
-        this._preparedStatements[opts.name].execute(args, (err, recordset, returnValue) => {
-          return this._queryResults(opts, err, recordset, returnValue, resolve, reject);
-        });
-      });
-      return promise;
-    }
-    return this._prepare(opts);
-  };
-
-  this._mapInstanceStatement = function mapInstanceStatement(opts) {
+  _mapInstanceStatement(opts) {
     const extension = {};
-    const model = this;
-    extension[opts.name] = function (args) {
-      const input = this.toJSON({processors: ['toDB']});
-      lodash.assign(input, args);
-      const promise = new Promise((resolve, reject) => {
-        model._preparedStatements[opts.name].execute(input, (err, recordset, returnValue) => {
-          return model._queryResults(opts, err, recordset, returnValue, resolve, reject);
+    this[opts.name] = function (obj) {
+      let pm;
+      if (!opts.static) {
+        pm = this.validateAndProcess(obj, 'toDB');
+      } else {
+        pm = Promise.resolve(obj);
+      }
+      return pm.then((input) => {
+        return new Promise((resolve, reject) => {
+          this._preparedStatements[opts.name].execute(input, (err, recordset, returnValue) => {
+            if (err) {
+              return reject(err);
+            }
+            return resolve(this._queryResults(opts, recordset, returnValue));
+          });
         });
       });
-      return promise;
     };
-    this.extendModel(extension);
     return this._prepare(opts);
   };
 
-  this._queryResults = function _queryResults(opts, err, recordset, returnValue, resolve, reject) {
-    if (err) {
-      return reject(err);
-    }
+  _queryResults (opts, recordset, returnValue) {
     if (opts.oneResult) {
       if (recordset.length === 0 || recordset[0].length === 0) {
-        return reject(new EmptyResult);
+        return Promise.reject(new EmptyResult);
       } else {
-        return resolve(this.create(recordset[0], {processors: ['fromDB']}));
+        return this.validateAndProcess(recordset[0], 'fromDB');
       }
     }
     const results = [];
     recordset.forEach((row) => {
-      results.push(this.create(row, {processors: ['fromDB']}));
+      results.push(this.validateAndProcess(row, 'fromDB'));
     });
-    return resolve(results);
+    return Promise.all(results);
   }
 
-  this._prepare = function _prepare(opts) {
-    return new Promise((resolve, reject) => {
-      this.getDB((db) => {
-        const statement = new mssql.PreparedStatement(db);
-        opts.args.forEach((arg) => {
-          statement.input(arg[0], arg[1]);
-        });
+  _prepare(opts) {
+    return this.getDB()
+    .then((db) => {
+      const statement = new mssql.PreparedStatement(db);
+      opts.args.forEach((arg) => {
+        statement.input(arg[0], arg[1]);
+      });
+      return new Promise((resolve, reject) => {
         this._preparedStatements[opts.name] = statement;
         statement.prepare(opts.query(), (err) => {
           if (err) {
@@ -207,21 +410,16 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
     });
   }
 
-  this.mapProcedure = function mapProcedure(opts) {
+  mapProcedure(opts) {
     const optsValid = methodValidators.mapProcedure.validate(opts);
     if (optsValid.error) {
       throw optsValid.error;
     }
-    opts.args = opts.args || [];
     opts.resultModels = opts.resultModels || [this];
-    if (opts.static) {
-      return this.mapStaticProc(opts);
-    } else {
-      return this.mapInstProc(opts);
-    }
-  };
+    return this.mapStaticProc(opts);
+  }
 
-  this._makeRequest = function (db, args, opts) {
+  _makeRequest (db, args, opts) {
     const request = new mssql.Request(db);
     opts.args.forEach((arg) => {
       const argdef = arg[1];
@@ -247,113 +445,176 @@ Model.prototype = Object.create(verymodel.VeryModel.prototype);
       }
     });
     return request;
-  };
+  }
 
-  this.mapStaticProc = function mapStaticProc(opts) {
-    Model.prototype[opts.name] = function (args) {
-      args = args || {};
-      if (typeof opts.processArgs === 'function') {
-        args = opts.processArgs(args, this);
+  _getDataType (row) {
+    if (!dataTypes[row.DATA_TYPE]) {
+      return;
+    }
+    if (dataCall[row.DATA_TYPE]) {
+      const callArgs = dataCall[row.DATA_TYPE].map((col) => {
+        return row[col];
+      });
+      return [row.PARAMETER_NAME.slice(1), dataTypes[row.DATA_TYPE].apply(mssql, callArgs)];
+    } else {
+      return [row.PARAMETER_NAME.slice(1), dataTypes[row.DATA_TYPE]];
+    }
+  }
+
+  mapStaticProc(opts) {
+    let oRequest;
+    return this.getDB()
+    .then((db) => {
+      const request = new mssql.Request(db);
+      oRequest = request;
+      request.multiple = true;
+      return Promise.resolve(request.query(`SELECt * FROM information_schema.parameters where specific_name='${opts.name}' ORDER BY ORDINAL_POSITION`), request);
+    })
+    .then((result, request) => {
+      const args = [];
+      const pms = [];
+      for (const row of result[0]) {
+        const def = this._getDataType(row);
+        if (def) {
+          pms.push(Promise.resolve(def));
+        } else {
+          pms.push(
+            new Promise((resolve, reject) => {
+              oRequest.query(`
+select tt.name AS table_Type,
+c.name as colName,
+st.name AS colType,
+c.*,
+st.*,
+tt.*
+from sys.table_types tt
+inner join sys.columns c on c.object_id = tt.type_table_object_id
+INNER JOIN sys.systypes AS ST  ON ST.xtype = c.system_type_id AND st.name != 'sysname'
+WHERE tt.name = '${row.USER_DEFINED_TYPE_NAME}'
+order by c.column_id`, (err, result) => {
+                /* $lab:coverage:off$ */
+                if (err) {
+                  return reject(err);
+                }
+                /* $lab:coverage:on$ */
+                const coltypes = [];
+                for (const row of result[0]) {
+                  if (dataUserCall.hasOwnProperty(row.colType)) {
+                    const callArgs = dataUserCall[row.colType].map((col) => {
+                      return row[col];
+                    });
+                    coltypes.push([row.colName, dataTypes[row.colType].apply(mssql, callArgs)]);
+                  } else {
+                    coltypes.push([row.colName, dataTypes[row.colType]]);
+                  }
+                }
+                resolve([row.PARAMETER_NAME.slice(1), module.exports.TVP(coltypes)]);
+              });
+            })
+          );
+        }
       }
-      const promise = new Promise((resolve, reject) => {
-        this.getDB((db) => {
-          const request = this._makeRequest(db, args, opts);
-          request.execute(opts.name, (err, recordsets, returnValue) => {
-            return this._procedureResults(opts, err, recordsets, returnValue, reject, resolve);
+      return Promise.all(pms)
+      .then((args) => {
+        return Promise.resolve(args);
+      });
+    })
+    .then((inputs) => {
+      const util = require('util');
+      opts.args = inputs;
+      this[opts.name] = function (obj, args) {
+        /* $lab:coverage:off$ */
+        args = args || {};
+        /* $lab:coverage:on$ */
+        const pm = this.validateAndProcess(obj, 'toDB');
+        let db;
+        return this.getDB()
+        .then((conn) => {
+          db = conn;
+          return pm;
+        }).then((obj) => {
+          lodash.assign(obj, args);
+          const request = this._makeRequest(db, obj, opts);
+          return new Promise((resolve, reject) => {
+            request.execute(opts.name, (err, recordsets, returnValue) => {
+              /* $lab:coverage:off$ */
+              if (err) {
+                return reject(err);
+              }
+              /* $lab:coverage:on$ */
+              return resolve(this._procedureResults(opts, recordsets, returnValue));
+            });
           });
         });
-      });
-      return promise;
-    }
-  };
-
-  this.mapInstProc = function mapInstProc(opts) {
-    const extension = {};
-    const model = this;
-    extension[opts.name] = function (args) {
-      args = args || {};
-      args = _.extend(this.toJSON({processors: ['toDB']}), args);
-      if (typeof opts.processArgs === 'function') {
-        args = opts.processArgs(args, this);
       }
-      const promise = new Promise((resolve, reject) => {
-        model.getDB((db) => {
-          const request = model._makeRequest(db, args, opts);
-          request.execute(opts.name, (err, recordsets, returnValue) => {
-            return model._procedureResults(opts, err, recordsets, returnValue, reject, resolve);
-          });
-        });
-      });
-      return promise;
-    };
-    this.extendModel(extension);
+    });
   };
 
-  this._procedureResults = function _procedureResults(opts, err, recordsets, returnValue, reject, resolve) {
-    //sending bad data to a procedure doesn't throw an error
-    //so I'm unsure how to make an error happen here
-    /* $lab:coverage:off$ */
-    if (err) {
-      return reject(err);
-    }
-    /* $lab:coverage:on$ */
+  _procedureResults(opts, recordsets, returnValue) {
     if (opts.oneResult) {
       if (recordsets[0].length === 0) {
-        return reject(new EmptyResult);
+        return Promise.reject(new EmptyResult);
       } else {
         recordsets[0] = recordsets[0].splice(0, 1);
       }
     }
 
     if (recordsets.length > 1 && recordsets.length !== opts.resultModels.length) {
-      return reject(Error(`Number of results sets is not equal to the number of resultModels for ${opts.name}`));
+      return Promise.reject(new Error(`Number of results sets is not equal to the number of resultModels for ${opts.name}`));
     }
 
     const results = new Map();
+    const pms = [];
     for (let idx in recordsets) {
       const rs = recordsets[idx];
       if (rs === 0) break;
-      let model = opts.resultModels[idx] || this;
-      if (typeof model === 'string') {
-        model = this.getModel(model);
-      }
+      let model = this.getModel(opts.resultModels[idx] || this);
       results.set(model, []);
       rs.forEach((row) => {
-        results.get(model).push(model.create(row, {processors: ['fromDB']}));
+        pms.push(
+          model.validateAndProcess(row, 'fromDB')
+          .then((rowvp) => {
+            results.get(model).push(rowvp);
+          })
+        )
       });
     }
-    for (let factory of results.keys()) {
-      for (let field of factory.fields) {
-        if (factory.definition[field].hasOwnProperty('remote')) {
-          let lfield = factory.definition[field].local;
-          let rfield = factory.definition[field].remote;
-          let relFactory = this.getModel(factory.definition[field].collection || factory.definition[field].model);
+    return Promise.all(pms)
+    .then(() => {
+      for (let factory of results.keys()) {
+        for (let field of Object.keys(factory.map)) {
+          let lfield = this.map[field].local;
+          let rfield = this.map[field].remote;
+          let relFactory = this.getModel(this.map[field].collection || this.map[field].model);
           (results.get(factory)).forEach( (local) => {
             (results.get(relFactory)).forEach( (remote) => {
               if (remote[rfield] == local[lfield]) {
-                local[field] = remote;
+                if (this.map[field].collection) {
+                  if (!local[field]) {
+                    local[field] = [];
+                  }
+                  local[field].push(remote);
+                } else {
+                  local[field] = remote;
+                }
               }
             });
           });
         }
       }
-    }
-    let primaryModel = opts.resultModels[0] || this;
-    if (typeof primaryModel === 'string') {
-      primaryModel = this.getModel(primaryModel);
-    }
-    if (opts.oneResult) {
-      return resolve(results.get(primaryModel)[0]);
-    }
-    return resolve(results.get(primaryModel));
+      const primaryModel = this.getModel(opts.resultModels[0] || this);
+      if (opts.oneResult) {
+        return Promise.resolve(results.get(primaryModel)[0]);
+      }
+      return Promise.resolve(results.get(primaryModel));
+    });
   }
-
-}).call(Model.prototype);
+}
 
 module.exports = {
   Model,
   setConnection: function setConnection(opts) {
-    connection = opts;
+    mssql_config = opts;
   },
   EmptyResult,
   getModel: function getModel(name) {

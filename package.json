@@ -10,7 +10,10 @@
   "dependencies": {
     "mssql": "^3.1.0",
     "underscore": "^1.8.3",
-    "verymodel": "^3.5.0"
+    "verymodel": "^3.5.0",
+    "wadofgum": "^5.1.0",
+    "wadofgum-process": "^0.1.0",
+    "wadofgum-validation": "^2.0.0"
   },
   "devDependencies": {
     "code": "^2.1.0",

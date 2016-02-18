@@ -3,6 +3,8 @@
 const lab = exports.lab = require('lab').script();
 const expect = require('code').expect;
 const mssql = require('mssql');
+const Joi = require('joi');
+
 
 const Seaquell = require('../index');
 const config = require('getconfig');
@@ -14,32 +16,24 @@ process.on('uncaughtException', function (err) {
 Seaquell.setConnection(config.mssql);
 
 const Test = new Seaquell.Model({
-  FirstName: {alias: 'FIRST_NAME'},
-  LastName: {alias: 'LAST_NAME'},
-}, {
   name: 'Test',
-  cache: true
-});
+  schema: Joi.object()
+    .rename('FIRST_NAME', 'FirstName', {ignoreUndefined: true})
+    .rename('LAST_NAME', 'LastName', {ignoreUndefined: true}),
+  }
+);
 
-Test.mapProcedure({
+const mp1 = Test.mapProcedure({
   static: true,
   name: 'testproc',
   oneResult: true,
-  args: [
-    ['FirstName', mssql.NVarChar(255)],
-    ['LastName', mssql.NVarChar(255)]
-  ]
 });
 
 
-Test.mapProcedure({
+const mp2 = Test.mapProcedure({
   static: false,
   oneResult: true,
   name: 'testproc',
-  args: [
-    ['FirstName', mssql.NVarChar(255)],
-    ['LastName', mssql.NVarChar(255)]
-  ]
 });
 
 const p1 = Test.mapStatement({
@@ -64,18 +58,15 @@ const p2 = Test.mapStatement({
   query: (args) => `SELECT @FirstName AS FirstName, @LastName AS LastName, 'derp' AS hurr`
 });
 
-Test.mapProcedure({
+const mp3 = Test.mapProcedure({
   static: true,
   name: 'multiselect',
   oneResult: false,
 });
 
-Test.mapProcedure({
+const mp4 = Test.mapProcedure({
   static: true,
   name: 'getuno',
-  args: [
-    ['LAST_NAME', mssql.NVarChar(50)]
-  ],
   oneResult: true,
 });
 
@@ -99,16 +90,9 @@ const p4 = Test.mapStatement({
   query: (args) => `SELECT @FirstName AS FirstName, @LastName AS LastName, @Age As Age`
 });
 
-Test.mapProcedure({
+const mp5 = Test.mapProcedure({
   static: true,
   name: 'customtype',
-  args: [
-    ['id', mssql.BigInt],
-    ['SomeSub', Seaquell.TVP([
-      ['a', mssql.NVarChar(50)],
-      ['b', mssql.NVarChar(50)]
-    ])]
-  ],
 });
 
 Test.mapQuery({
@@ -122,7 +106,7 @@ Test.mapQuery({
   static: false,
   oneResult: true,
   name: 'instancequery',
-  query: (args, model) => `SELECT '${model.FirstName}' AS FirstName, '${model.LastName}' AS LastName, 'derp' AS hurr`
+  query: (args, model) => `SELECT '${args.FirstName}' AS FirstName, '${args.LastName}' AS LastName, 'derp' AS hurr`
 });
 
 Test.mapQuery({
@@ -146,11 +130,11 @@ Test.mapQuery({
   query: (args, model) => `select * from sys.types WHERE name='haaaaaybuddy'`
 });
 
-  
 lab.experiment('testing functions', () => {
   
   lab.test('create temp table proc', (done) => {
-    Test.getDB((db) => {
+    Test.getDB()
+    .then((db) => {
       const request = new mssql.Request(db);
       request.multiple = true;
       request.query(`IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'multiselect') AND type IN (N'P', N'PC')) DROP PROCEDURE multiselect`).then(() => {
@@ -164,16 +148,81 @@ SELECT * FROM #TempTest;`);
       }).catch(done);
     });
   });
+
+  let Table;
+
+  lab.test('create table funcs', (done) => {
+    Table = new Seaquell.Model();
+    let request;
+  
+    Test.getDB()
+    .then((db) => {
+      request = new mssql.Request(db);
+      request.multiple = true;
+      request.query(`if exists (select * from sysobjects where name='TempTest2' and xtype='U')
+                    DROP TABLE TempTest2;
+                    CREATE TABLE TempTest2 (id BigInt, FIRST_NAME VARCHAR(50), LAST_NAME VARCHAR(50));`)
+    })
+    .then(() => {
+      return Table.setTable('TempTest2').then(() => {
+        done();
+      });
+    }).catch((err) => { console.log(err.stack); });
+  });
+
+  lab.test('use table funcs', {timeout: 6000}, (done) => {
+    let request;
+    Test.getDB()
+    .then((db) => {
+      request = new mssql.Request(db);
+      request.multiple = true;
+      return Table.insert({FIRST_NAME: 'Nathan', LAST_NAME: 'Fritz'})
+    })
+    .then(() => {
+      return Table.select()
+    })
+    .then((results) => {
+      expect(results[0].FIRST_NAME).to.equal('Nathan');
+    })
+    .then(() => {
+      return Table.insert({FIRST_NAME: 'Bob', LAST_NAME: 'Sagat'});
+    })
+    .then(() => {
+      return Table.select({LAST_NAME: 'Sagat'})
+    })
+    .then((results) => {
+      expect(results[0].FIRST_NAME).to.equal('Bob');
+      return Table.update({FIRST_NAME: 'Leo'}, {LAST_NAME: 'Sagat'});
+    })
+    .then(() => {
+      return Table.select({LAST_NAME: 'Sagat'})
+    })
+    .then((results) => {
+      expect(results[0].FIRST_NAME).to.equal('Leo');
+      return Table.delete({LAST_NAME: 'Fritz'})
+    })
+    .then(() => {
+      return Table.select({LAST_NAME: 'Fritz'})
+    })
+    .then((results) => {
+      expect(results.length).to.equal(0);
+      return request.query('DROP TABLE TempTest2', (err, results) => {
+        done();
+      });
+    });
+  });
+
   
   lab.test('create user defined table proc', (done) => {
-    Test.getDB((db) => {
+    Test.getDB()
+    .then((db) => {
       const request = new mssql.Request(db);
       request.multiple = true;
       request.query(`IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'customtype') AND type IN (N'P', N'PC')) DROP PROCEDURE customtype`).then(() => {
       }).then(() => {
         return request.query(`IF EXISTS (SELECT * FROM sys.types WHERE is_user_defined=1 AND name='TestUserType') DROP TYPE TestUserType`);
       }).then(() => {
-        return request.query(`CREATE TYPE TestUserType AS TABLE (a NVarChar(50), b NVarChar(50))`);
+        return request.query(`CREATE TYPE TestUserType AS TABLE (id BigInt, a NVarChar(50), b NVarChar(50))`);
       }).then(() => {
         return request.query(`CREATE PROCEDURE customtype
 @id BigInt,
@@ -187,7 +236,8 @@ SELECT a AS FIRST_NAME, b AS LAST_NAME FROM @SomeSub;`);
   });
   
   lab.test('create get table proc', (done) => {
-    Test.getDB((db) => {
+    Test.getDB()
+    .then((db) => {
       const request = new mssql.Request(db);
       request.multiple = true;
       request.query(`IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'getuno') AND type IN (N'P', N'PC')) DROP PROCEDURE getuno`).then(() => {
@@ -204,7 +254,8 @@ SELECT a AS FIRST_NAME, b AS LAST_NAME FROM @SomeSub;`);
   });
   
   lab.test('create select from value', (done) => {
-    Test.getDB((db) => {
+    Test.getDB()
+    .then((db) => {
       const request = new mssql.Request(db);
       request.multiple = true;
       request.query(`IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'getselect') AND type IN (N'P', N'PC')) DROP PROCEDURE getselect`).then(() => {
@@ -220,7 +271,8 @@ SELECT a AS FIRST_NAME, b AS LAST_NAME FROM @SomeSub;`);
   });
   
   lab.test('create get table proc2', (done) => {
-    Test.getDB((db) => {
+    Test.getDB()
+    .then((db) => {
       const request = new mssql.Request(db);
       request.multiple = true;
       request.query(`IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'getuno2') AND type IN (N'P', N'PC')) DROP PROCEDURE getuno2`).then(() => {
@@ -237,7 +289,8 @@ SELECT a AS FIRST_NAME, b AS LAST_NAME FROM @SomeSub;`);
   });
   
   lab.test('create multiresults proc', (done) => {
-    Test.getDB((db) => {
+    Test.getDB()
+    .then((db) => {
       const request = new mssql.Request(db);
       request.multiple = true;
       request.query(`IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'multiresult') AND type IN (N'P', N'PC')) DROP PROCEDURE multiresult`).then(() => {
@@ -256,7 +309,8 @@ AS
   });
   
   lab.test('create super multiresults proc', (done) => {
-    Test.getDB((db) => {
+    Test.getDB()
+    .then((db) => {
       const request = new mssql.Request(db);
       request.multiple = true;
       request.query(`IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'manyresults') AND type IN (N'P', N'PC')) DROP PROCEDURE manyresults`).then(() => {
@@ -277,13 +331,14 @@ AS
   });
 
   lab.test('loaded statements', (done) => {
-    Promise.all([p1, p2, p3, p4]).then(() => {
+    Promise.all([p1, p2, p3, p4, mp1, mp2, mp3, mp4, mp5]).then(() => {
       done();
     }).catch(done);
   });
 
   lab.test('loading stored procs', (done) => {
-    Test.getDB((db) => {
+    Test.getDB()
+    .then((db) => {
       const request = new mssql.Request(db);
       request.multiple = true;
       request.query(`IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'testproc') AND type IN (N'P', N'PC')) DROP PROCEDURE testproc;`).then(() => {
@@ -304,89 +359,62 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
 
   lab.test('map many result sets', (done) => {
     const Person = new Seaquell.Model({
-      id: {},
-      name: {},
-      books: {collection: 'Book', local: 'id', remote: 'person_id'},
-      cars: {collection: 'Car', local: 'id', remote: 'person_id'},
-      jobs: {collection: 'Job', local: 'id', remote: 'person_id'},
-      children: {collection: 'Child', local: 'id', remote: 'person_id'},
-      traits: {collection: 'Trait', local: 'id', remote: 'person_id'},
-    }, {
+      map: {
+        books: {collection: 'Book', local: 'id', remote: 'person_id'},
+        cars: {collection: 'Car', local: 'id', remote: 'person_id'},
+        jobs: {collection: 'Job', local: 'id', remote: 'person_id'},
+        children: {collection: 'Child', local: 'id', remote: 'person_id'},
+        traits: {collection: 'Trait', local: 'id', remote: 'person_id'},
+      },
       name: 'Person',
-      cache: true
     });
     const Book = new Seaquell.Model({
-      id: {},
-      person_id: {},
-      title: {},
-    }, {
       name: 'Book',
-      cache: true
     });
     const Car = new Seaquell.Model({
-      id: {},
-      person_id: {},
-      make: {},
-      model: {}
-    }, {
       name: 'Car',
-      cache: true
     });
     const Job = new Seaquell.Model({
-      id: {},
-      person_id: {},
-      company: {},
-      title: {}
-    }, {
       name: 'Job',
-      cache: true
     });
     const Child = new Seaquell.Model({
-      id: {},
-      person_id: {},
-      name: {},
-      dob: {}
-    }, {
       name: 'Child',
-      cache: true
     });
     const Trait = new Seaquell.Model({
-      id: {},
-      person_id: {},
-      name: {}
-    }, {
       name: 'Trait',
-      cache: true
     });
     Person.mapProcedure({
       static: true,
       name: 'manyresults',
-      args: [['inputid', mssql.BigInt]],
       oneResult: true,
       resultModels: ['Person', 'Book', 'Car', 'Job', 'Child', 'Trait']
+    })
+    .then(() => {
+      Person.manyresults({inputid: 7}).then((person) => {
+        expect(person.jobs[1].company).to.equal('Watches Watches Watches');
+        expect(person.children[0].name).to.equal('Bert');
+        expect(person.cars[2].make).to.equal('Dodge');
+        expect(person.traits.length).to.equal(3);
+        done();
+      }).catch(done);
     });
-    Person.manyresults({inputid: 7}).then((person) => {
-      expect(person.jobs[1].company).to.equal('Watches Watches Watches');
-      expect(person.children[0].name).to.equal('Bert');
-      expect(person.cars[2].make).to.equal('Dodge');
-      expect(person.traits.length).to.equal(3);
-      done();
-    }).catch(done);
   });
+   
 
   lab.test('bad mapping of result sets', (done) => {
     const Person = Seaquell.getModel('Person');
     Person.mapProcedure({
       static: true,
       name: 'manyresults',
-      args: [['inputid', mssql.BigInt]],
       oneResult: true,
       resultModels: ['Person', 'Car', 'Job', 'Child', 'Trait']
-    });
-    Person.manyresults({inputid: 7}).then((person) => {
-      done(new Error('should have thrown'));
-    }).catch((e) => {
-      done();
+    })
+    .then(() => {
+      Person.manyresults({inputid: 7}).then((person) => {
+        done(new Error('should have thrown'));
+      }).catch((e) => {
+        done();
+      });
     });
   });
 
@@ -402,11 +430,11 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
   });
 
   lab.test('instance procedure', (done) => {
-    const test = Test.create({
+    const test = {
       FirstName: 'Nathanael',
       LastName: 'Fritzer'
-    });
-    test.testproc().then((results) => {
+    };
+    Test.testproc(test).then((results) => {
       expect(results.FirstName).to.equal('Nathanael');
       expect(results.LastName).to.equal('Fritzer');
       done();
@@ -425,11 +453,11 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
   });
 
   lab.test('instance statement', (done) => {
-    const test = Test.create({
+    const test = {
       FirstName: 'Nathan',
       LastName: 'Fritz',
-    });
-    test.teststate().then((results) => {
+    };
+    Test.teststate(test).then((results) => {
       expect(results.FirstName).to.equal('Nathan');
       expect(results.LastName).to.equal('Fritz');
       done();
@@ -448,18 +476,18 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
   });
 
   lab.test('instance query', (done) => {
-    const test = Test.create({
+    const test = {
       FirstName: 'Nathan',
       LastName: 'Fritz',
-    });
-    test.instancequery().then((results) => {
+    };
+    Test.instancequery(test).then((results) => {
       expect(results.FirstName).to.equal('Nathan');
       expect(results.LastName).to.equal('Fritz');
       done();
     }).catch(done);
   });
   
-  lab.test('multi static statment', (done) => {
+  lab.test('multi static statement', (done) => {
     Test.multiselect().then((results) => {
       expect(results[0].FirstName).to.equal('Nathan');
       expect(results[0].LastName).to.equal('Fritz');
@@ -468,7 +496,7 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
     }).catch(done);
   });
   
-  lab.test('unfound static statment', (done) => {
+  lab.test('unfound static staetment', (done) => {
     Test.getuno({LAST_NAME: 'Derpy'}).then((results) => {
       done('should have errored');
     }).catch((err) => {
@@ -477,8 +505,8 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
     });
   });
   
-  lab.test('single static statment', (done) => {
-    Test.getuno({LAST_NAME: 'Fritz'}).then((results) => {
+  lab.test('single static statement', (done) => {
+    Test.getuno({}, {LAST_NAME: 'Fritz'}).then((results) => {
       expect(results.FirstName).to.equal('Nathan');
       expect(results.LastName).to.equal('Fritz');
       done();
@@ -486,56 +514,52 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
   });
 
   lab.test('join multi collection', (done) => {
-    const Item = new Seaquell.Model({
-      'name_id': {},
-      'name': {},
-      'weight': {}
-    }, {name: 'jm_item', cache: true});
+    const Item = new Seaquell.Model({ name: 'jm_item' });
     const Name = new Seaquell.Model({
-      'id': {},
-      'first': {},
-      'last': {},
-      'items': { collection: 'jm_item', local: 'id', 'remote': 'name_id' }
-    }, {name: 'rm_name', cache: true});
+      map: {
+        items: { collection: 'jm_item', local: 'id', 'remote': 'name_id' }
+      },
+      name: 'rm_name'});
     Name.mapProcedure({
       static: true,
       name: 'multiresult',
       oneResult: false,
       resultModels: ['', 'jm_item']
+    })
+    .then(() => {
+      Name.multiresult()
+      .then((names) => {
+        expect(names[0].items[1].name).to.equal('lettuce');
+        expect(names[2].items[1].name).to.equal('hair');
+        done();
+      }).catch(done);
     });
-    Name.multiresult()
-    .then((names) => {
-      expect(names[0].items[1].name).to.equal('lettuce');
-      expect(names[2].items[1].name).to.equal('hair');
-      done();
-    }).catch(done);
   });
 
   lab.test('join multi model', (done) => {
-    const Item = new Seaquell.Model({
-      'name_id': {},
-      'name': {},
-      'weight': {}
-    }, {name: 'jm_item2', cache: true});
+    const Item = new Seaquell.Model({name: 'jm_item2'});
     const Name = new Seaquell.Model({
-      'id': {},
-      'first': {},
-      'last': {},
-      'item': { model: 'jm_item2', local: 'id', 'remote': 'name_id' }
-    }, {name: 'rm_name2', cache: true});
+      map: {
+        'item': { model: 'jm_item2', local: 'id', 'remote': 'name_id' }
+      },
+      name: 'rm_name2'
+    });
     Name.mapProcedure({
       static: true,
       name: 'multiresult',
       oneResult: false,
       resultModels: ['', 'jm_item2']
+    })
+    .then(() => {
+      Name.multiresult()
+      .then((names) => {
+        expect(names[0].item.name).to.equal('lettuce');
+        expect(names[2].item.name).to.equal('hair');
+        done();
+      }).catch(done);
     });
-    Name.multiresult()
-    .then((names) => {
-      expect(names[0].item.name).to.equal('lettuce');
-      expect(names[2].item.name).to.equal('hair');
-      done();
-    }).catch(done);
   });
+
 
   lab.test('get model', (done) => {
     const model = Seaquell.getModel('Test');
@@ -574,12 +598,16 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
     done();
   });
 
+  /*
   lab.test('queryResults error', (done) => {
     Test._queryResults({}, 'ERROR', [], 0, Promise.resolve, function () {
       done();
     });
   });
+  */
 
+
+  /*
   lab.test('processArgs static', (done) => {
     Test.mapProcedure({
       static: true,
@@ -626,10 +654,11 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
       done();
     }).catch(done);
   });
+  */
 
   lab.test('no args statement', (done) => {
-    const test = Test.create();
-    test.noargs()
+    const test = {};
+    Test.noargs()
     .then((model) => {
       expect(model.FirstName).to.equal('Billy');
       expect(model.LastName).to.equal('Bob');
@@ -638,7 +667,7 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
   });
   
   lab.test('custom type static', (done) => {
-    Test.customtype({id: 1, SomeSub: [{a: 'Billy', b: 'Bob',}, {a: 'Ham', b: 'Sammich'}]}).then((model) => {
+    Test.customtype({id: 1, SomeSub: [{id: 1, a: 'Billy', b: 'Bob',}, {id: 2, a: 'Ham', b: 'Sammich'}]}).then((model) => {
       expect(model[0].FirstName).to.equal('Billy');
       expect(model[0].LastName).to.equal('Bob');
       expect(model[1].FirstName).to.equal('Ham');
@@ -680,23 +709,18 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
     HasSubType.mapProcedure({
       static: false,
       name: 'customtype',
-      args: [
-        ['id', mssql.BigInt],
-        ['SomeSub', Seaquell.TVP([
-          ['a', mssql.NVarChar(50)],
-          ['b', mssql.NVarChar(50)]
-        ])]
-      ],
       resultModels: ['Test']
+    })
+    .then(() => {
+      const model = {id: 1, SomeSub: [{a: 'Billy', b: 'Bob'}, {a: 'Ham', b: 'Sammich'}]};
+      HasSubType.customtype(model).then((rmodel) => {
+        expect(rmodel[0].FirstName).to.equal('Billy');
+        expect(rmodel[0].LastName).to.equal('Bob');
+        expect(rmodel[1].FirstName).to.equal('Ham');
+        expect(rmodel[1].LastName).to.equal('Sammich');
+        done();
+      }).catch(done);
     });
-    const model = HasSubType.create({id: 1, SomeSub: [{a: 'Billy', b: 'Bob'}, {a: 'Ham', b: 'Sammich'}]});
-    model.customtype().then((rmodel) => {
-      expect(rmodel[0].FirstName).to.equal('Billy');
-      expect(rmodel[0].LastName).to.equal('Bob');
-      expect(rmodel[1].FirstName).to.equal('Ham');
-      expect(rmodel[1].LastName).to.equal('Sammich');
-      done();
-    }).catch(done);
   });
 
   lab.test('bad prepared statement', (done) => {
@@ -722,16 +746,18 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
 
   lab.test('inDB outDB processor', (done) => {
       const Model = new Seaquell.Model({
-          firstName: {
-              processors: {
-                  fromDB: function (value) {
-                      return value.replace('-', ' ');
-                  },
-                  toDB: function (value) {
-                      return value.replace(' ', '_') + '-x';
-                  },
-              }
+        processors: {
+          fromDB: {
+            firstName: function (value) {
+                return value.replace('-', ' ');
+            }
+          },
+          toDB: {
+            firstName: function (value) {
+                return value.replace(' ', '_') + '-x';
+            }
           }
+        }
       });
     Model.mapQuery({
       static: true,
@@ -743,21 +769,19 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
       static: false,
       oneResult: false,
       name: 'getselect',
-      args: [
-        ['firstName', mssql.NVarChar(255)],
-      ],
       resultModels: [Model, Model]
+    })
+    .then(() => {
+      Model.testOut().then((models) => {
+        expect(models[0].firstName).to.equal('test a1');
+        expect(models[1].firstName).to.equal('test b1');
+        expect(models[2].firstName).to.equal('test c1');
+        return Model.getselect(models[0]);
+      }).then((model) => {
+        expect(model[0].firstName).to.equal('test_a1 x');
+        done();
+      }).catch(done);
     });
-    Model.testOut().then((models) => {
-      expect(models[0].firstName).to.equal('test a1');
-      expect(models[1].firstName).to.equal('test b1');
-      expect(models[2].firstName).to.equal('test c1');
-      return models[0].getselect();
-    }).then((model) => {
-      expect(model[0].firstName).to.equal('test_a1 x');
-      done();
-    }).catch(done);
-
   });
 
   lab.test('null TVP', (done) => {
@@ -769,7 +793,8 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
   });
   
   lab.test('disconnect', (done) => {
-    Test.getDB((db) => {
+    Test.getDB()
+    .then((db) => {
       Test.unprepare('teststate').then(() => {
         db.close();
         done();

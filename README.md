@@ -1,5 +1,7 @@
 # Seaquell
 
+![Seagull Waterbender Moses](https://cldup.com/xBEt5glGHQ.png)
+
 A reverse-ORM for query Microsoft SQL Server.
 
 In a reverse-ORM, you model what the query results in rather than modeling the tables.
