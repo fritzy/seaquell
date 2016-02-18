@@ -72,13 +72,11 @@ Test.mapProcedure({
 
 [![npm i seaquell](https://nodei.co/npm/seaquell.png)](https://npmjs.org/packages/seaquell)
 
-## setConnection
-
-Call `Seaquell.setConnection({})` with the same options you'd use for [node-mssql](https://github.com/patriksimek/node-mssql#basic-configuration-is-same-for-all-drivers).
 
 ## Creating a Model 
 
-`new Seaquell.Model({
+```js
+new Seaquell.Model({
   name: 'someModel'
   map: {
     someField: {
@@ -95,7 +93,8 @@ Call `Seaquell.setConnection({})` with the same options you'd use for [node-mssq
       }
     }
   }
-})`
+})
+```
 
 * `map`: has fields with a sub `collection` or sub `model`, `remote` and `local` attributes to indicate how resulting objects should be joined into the parent model. Used in conjunction with `resultModels` to map the resultsets back to the right Model.
 * `name`: names the model so that you can reference it by string in map and other places
@@ -178,7 +177,7 @@ opts: {
 
 __return__: `undefined`
 
-### Seaquell.setTable(name)
+### setTable(name)
 
 Sets up insert(obj), update(obj, whereobj), select(whereobj), delete(whereobj)
 
@@ -217,9 +216,21 @@ Table.insert({FIRST_NAME: 'Nathan', LAST_NAME: 'Fritz'})
 });
 ```
 
+### validate(obj)
+
+Validates using the Joi schema resulting in a new (remember that Joi can transform) object from a Promise.
+
+### process(obj, tags)
+
+Runs processing tags against .processors resulting in a new object from a Promise.
+
+## validateAndProcess(obj, tags)
+
+Runs both validation and processors resulting in a new object from a Promise.
+
 ### Seaquell.getModel(name)
 
-__seaquell.getModel(name)__
+__model.getModel(name)__
 
 Returns the model named 'name';
 
