@@ -8,7 +8,6 @@ const lodash = require('lodash');
 const assert = require('assert');
 const Joi = require('joi');
 const mssql = require('mssql');
-const _ = require('underscore');
 
 const methodValidators = {
   mapProcedure: Joi.object({

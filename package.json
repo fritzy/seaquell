@@ -8,6 +8,7 @@
     "url": "git@github.com:fritzy/seaquell.git"
   },
   "dependencies": {
+    "lodash": "^4.5.0",
     "mssql": "^3.1.0",
     "underscore": "^1.8.3",
     "wadofgum": "^5.1.0",
