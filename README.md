@@ -2,21 +2,20 @@
 
 ![Seagull Waterbender Moses](https://cldup.com/xBEt5glGHQ.png)
 
-A reverse-ORM for query Microsoft SQL Server.
+A [pure function](http://www.nicoespeon.com/en/2015/01/pure-functions-javascript/) model class for MS SQL Server.
 
-In a reverse-ORM, you model what the query results in rather than modeling the tables.
+Methods are passed a normal object and respond with a new object.
+Incoming and outgoing objects are validated and transformed by [Joi](https://npmjs.org/package/joi) schemas when supplied, and transformed by processing functions when supplied.
 
-Models are extensions of [VeryModel](https://github.com/fritzy/verymodel).
+The Model instance itself does not keep track of fields, you are expected to pass in an object to every function.
 
 ## Example
 
 ```javascript
 'use strict';
 
-const Seaquell = require('seaquell');
 const mssql = require('mssql');
-
-Sealquell.setConnection({
+const Seaquell = require('seaquell')({
   "user": "sa",
   "password": "password",
   "server": "localhost",
@@ -28,46 +27,45 @@ Sealquell.setConnection({
 });
 
 const Test = new Seaquell.Model({
-  FirstName: {},
-  LastName: {},
+  name: 'test',
+  schema: Joi.object({
+    FirstName: joi.string(),
+    LastName: joi.string()
+  })
 });
 
-Test.mapProcedure({
+Promise.all(Test.mapProcedure({
   static: true,
   name: 'testproc',
-  args: [
-    ['FirstName', mssql.NVarChar(255)],
-    ['LastName', mssql.NVarChar(255)]
-  ]
-});
-
+}),
 Test.mapProcedure({
   static: false,
   name: 'testproc',
-  args: [
-    ['FirstName', mssql.NVarChar(255)],
-    ['LastName', mssql.NVarChar(255)]
-  ]
-});
+})).then(() => 
 
-Test.testproc({
-  FirstName: 'Nathan',
-  LastName: 'Fritz',
-}).then((results) => {
-  console.log(results.results[0].toJSON());
+  Test.testproc({
+    FirstName: 'Nathan',
+    LastName: 'Fritz',
+  }).then((results) => {
+
+    console.log(results.results[0].toJSON());
     // {FirstName: "Nathan", LastName: "Fritz"}
-  const test = results.results[0];
-  test.FirstName = 'Nathanael';
-  return test.testproc();
-}).then((response) => {
-  console.log(response.results[0].toString());
-  // {"FirstName": "Nathanael", "LastName": "Fritz"}
-  Test.getDB((db) => {
-    db.close();
+    const test = results.results[0];
+    test.FirstName = 'Nathanael';
+    return test.testproc();
+  }).then((response) => {
+
+    console.log(response.results[0].toString());
+    // {"FirstName": "Nathanael", "LastName": "Fritz"}
+    Test.getDB((db) => {
+
+      db.close();
+    });
+  }).catch((err) => {
+
+    console.log(err.stack);
   });
-}).catch((err) => {
-  console.log(err.stack);
-});
+}
 ```
 
 ## Install
@@ -80,44 +78,31 @@ Call `Seaquell.setConnection({})` with the same options you'd use for [node-mssq
 
 ## Creating a Model 
 
-Instantiate a new model with `new Seaquell.Model`. See [VeryModel](https://github.com/fritzy/verymodel) for examples.
+`new Seaquell.Model({
+  name: 'someModel'
+  map: {
+    someField: {
+      'collection or model': 'otherModelName',
+      remote: 'someRemoteId',
+      local: 'localId'
+    }
+  },
+  schema: Joi.object(),
+  processors: {
+    'processorName': {
+      'fieldName: (input, model) => {
+        return Promise.resolve(input+'modification');
+      }
+    }
+  }
+})`
 
-You can set the model option of `mssql` for individual models to have different connections.
-
-## VeryModel extensions
-
-* The fields that have a sub `collection` or sub `model` can also include the `remote` and `local` attributes to indicate how resulting objects should be joined into the parent model. Used in conjunction with `resultModels` to map the resultsets back to the right Model.
-* The custom processor `fromDB` is called when models are being created from the db results.
-* The custom processor `toDB` is called when model instances are used as input for stored procs.
-
-### Example
-
-```js
-const Item = new Seaquell.Model({
-  'name_id': {},
-  'name': {},
-  'weight': {}
-}, {name: 'jm_item', cache: true});
-const Name = new Seaquell.Model({
-  'id': {},
-  'first': {},
-  'last': {},
-  'items': { collection: 'jm_item', local: 'id', 'remote': 'name_id' }
-}, {name: 'rm_name', cache: true});
-Name.mapProcedure({
-  static: true,
-  name: 'multiresult',
-  oneResult: false,
-  resultModels: ['', 'jm_item']
-});
-Name.multiresult()
-.then((names) => {
-  expect(names[0].items[1].name).to.equal('lettuce');
-  expect(names[2].items[1].name).to.equal('hair');
-  done();
-}).catch(done);
-```
-
+* `map`: has fields with a sub `collection` or sub `model`, `remote` and `local` attributes to indicate how resulting objects should be joined into the parent model. Used in conjunction with `resultModels` to map the resultsets back to the right Model.
+* `name`: names the model so that you can reference it by string in map and other places
+* `schema`: [Joi](https://npmjs.org/package/joi) schema object. Keep in mind, joi can do transforms (rename, casting, etc)
+* `processors` object of processor tags with field transformations. Called when Model`.process` is called.
+  * The custom processor `fromDB` is called when models are being created from the db results.
+  * The custom processor `toDB` is called when model instances are used as input for stored procs.
 
 ## Methods
 
@@ -150,7 +135,7 @@ __Note:__: When the method is attached to a model instance (static: false), the 
 
 ####Usage
 
-ModelName.optsName(args) or Instance.optName(args)
+Model[statementName](modelobj, args)
 
 __return__: Promise with `{results, output}` or `modelInstance` if `oneResult` set to `true`.
 
@@ -163,27 +148,19 @@ __mapProcedure__(opts)
 ```
 opts: {
   name: (String) name of method,
-  args: [ //input parameters for the prepared statement
-    [String() name of parameter, mssql.type a valid mssql type or Seaquell.TVP()],
-    [string, type],
-    ...
-  ],
   oneResult: (Boolean) return array of model instance if false (default) or single if true,
-  static: (Boolean) attach to Model Factory or model instances,
   resultModels: (Array) string names of Model Factories to use for creating recordsets if more than one
   processArgs: (function(args, model) return args) function to process incoming args of resulting method before passing it on to the stored proceedure. The 2nd arguement will be the factory for static methods and the model instance for non-static methods.
 }
 ```
 
-__return__: `undefined`
-
-__Note:__: When the method is attached to a model instance (static: false), the model instance fields are used as default values for the query.
+__return__: Promise awaiting setup.
 
 ####Usage
 
-ModelName.optsName(args) or Instance.optName(args)
+ModelName\[name\](modelobj, args)
 
-__return__: Promise with `[modelInstances]` or `modelInstance` if `oneResult` set to `true`.
+__return__: Promise with array of model validated objects or a singular result if `oneResult` set to `true`.
 
 ### mapQuery
 
@@ -196,11 +173,49 @@ opts: {
   name: (String) name of method,
   query: (function) function returning query string. passed (args, instance)
   oneResult: (Boolean) return array of model instance if false (default) or single if true,
-  static: (Boolean) attach to Model Factory or model instances
 }
 ```
 
 __return__: `undefined`
+
+### Seaquell.setTable(name)
+
+Sets up insert(obj), update(obj, whereobj), select(whereobj), delete(whereobj)
+
+Returns a Promise awaiting the configuration of these methods.
+
+```js
+Table.insert({FIRST_NAME: 'Nathan', LAST_NAME: 'Fritz'})
+.then(() => {
+  return Table.select()
+})
+.then((results) => {
+  expect(results[0].FIRST_NAME).to.equal('Nathan');
+})
+.then(() => {
+  return Table.insert({FIRST_NAME: 'Bob', LAST_NAME: 'Sagat'});
+})
+.then(() => {
+  return Table.select({LAST_NAME: 'Sagat'})
+})
+.then((results) => {
+  expect(results[0].FIRST_NAME).to.equal('Bob');
+  return Table.update({FIRST_NAME: 'Leo'}, {LAST_NAME: 'Sagat'});
+})
+.then(() => {
+  return Table.select({LAST_NAME: 'Sagat'})
+})
+.then((results) => {
+  expect(results[0].FIRST_NAME).to.equal('Leo');
+  return Table.delete({LAST_NAME: 'Fritz'})
+})
+.then(() => {
+  return Table.select({LAST_NAME: 'Fritz'})
+})
+.then((results) => {
+  expect(results.length).to.equal(0);
+});
+```
 
 ### Seaquell.getModel(name)
 
@@ -218,15 +233,14 @@ Similar to "args" in mapProcedure, the types argument is an array of arrays.
 
 ```js
 const Book = new Seaquell.Model({
-  title: {}
 });
 const Author = new Seaquell.Model({
-  name: {}
-  books: {collection: 'Book'}
+  map: {
+    books: {collection: 'Book'}
+  }
 });
 
 Author.mapProcedure({
-  static: false,
   args: [
     ['name', mssql.NVarChar(50)],
     ['books', Seaquell.TVP([
@@ -234,18 +248,20 @@ Author.mapProcedure({
     ])]
   ],
   name: 'insertAuthorWithBooks'
-});
+})
+.then(() => {
 
-const author = Author.create({
-  name: 'Nathan Fritz',
-  books: [
-    {title: 'A Tale of Ham'},
-    {title: 'Why Now?'}
-  ]
-});
+  const author = {
+    name: 'Nathan Fritz',
+    books: [
+      {title: 'A Tale of Ham'},
+      {title: 'Why Now?'}
+    ]
+  };
 
-author.insertAuthorWithBooks().then(() => {
-  //tada
+  author.insertAuthorWithBooks().then(() => {
+    //tada
+  });
 });
 ```
 

@@ -6,14 +6,13 @@ const mssql = require('mssql');
 const Joi = require('joi');
 
 
-const Seaquell = require('../index');
 const config = require('getconfig');
 
 process.on('uncaughtException', function (err) {
   console.log(err.stack);
 });
 
-Seaquell.setConnection(config.mssql);
+const Seaquell = require('../index')(config.mssql);
 
 const Test = new Seaquell.Model({
   name: 'Test',

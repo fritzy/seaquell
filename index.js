@@ -96,10 +96,12 @@ function EmptyResult() {
 }
 
 EmptyResult.prototype = Object.create(Error.prototype);
+    
+const TVP = (types) => {
+  return {type: 'TVP', types};
+};
 
-let mssql_config;
-let mssql_conn;
-
+let getDB;
 const cached_models = {};
 
 class Model extends wadofgum.mixin(wadofgumValidation, wadofgumProcess) {
@@ -114,25 +116,7 @@ class Model extends wadofgum.mixin(wadofgumValidation, wadofgumProcess) {
 
     this._preparedStatements = {};
 
-    this.getDB = () => {
-      return new Promise((resolve, reject) => {
-        if (!this.meta.mssql)  {
-          if (mssql_conn) {
-            this.meta.mssql = mssql_conn
-            return resolve(mssql_conn);
-          }
-          const conn = new mssql.Connection(mssql_config, (err) => {
-            /* $lab:coverage:off$ */
-            if (err) return reject(err);
-            /* $lab:coverage:on$ */
-            this.meta.mssql = mssql_conn = conn;
-            return resolve(this.meta.mssql);
-          });
-        } else {
-          return resolve(this.meta.mssql);
-        }
-      });
-    };
+    this.getDB = getDB;
 
     this.unprepare = function unprepare(name) {
       return this._preparedStatements[name].unprepare();
@@ -508,7 +492,7 @@ order by c.column_id`, (err, result) => {
                     coltypes.push([row.colName, dataTypes[row.colType]]);
                   }
                 }
-                resolve([row.PARAMETER_NAME.slice(1), module.exports.TVP(coltypes)]);
+                resolve([row.PARAMETER_NAME.slice(1), TVP(coltypes)]);
               });
             })
           );
@@ -611,17 +595,35 @@ order by c.column_id`, (err, result) => {
   }
 }
 
-module.exports = {
-  Model,
-  setConnection: function setConnection(opts) {
-    mssql_config = opts;
-  },
-  EmptyResult,
-  getModel: function getModel(name) {
-    return cached_models[name];
-  },
-  TVP: function TVP(types) {
-    return {type: 'TVP', types};
-  },
-  Mssql: mssql
+module.exports = (mssql_config) => {
+
+  let mssql_conn;
+
+  getDB = () => {
+    return new Promise((resolve, reject) => {
+      if (!mssql_conn)  {
+        const conn = new mssql.Connection(mssql_config, (err) => {
+          /* $lab:coverage:off$ */
+          if (err) return reject(err);
+          /* $lab:coverage:on$ */
+          mssql_conn = conn;
+          return resolve(mssql_conn);
+        });
+      } else {
+        return resolve(mssql_conn);
+      }
+    });
+  };
+
+  return {
+    Model,
+    getDB,
+    EmptyResult,
+    getModel: function getModel(name) {
+      return cached_models[name];
+    },
+    TVP,
+    Mssql: mssql
+  };
 };
+
