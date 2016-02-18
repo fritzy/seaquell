@@ -88,7 +88,7 @@ new Seaquell.Model({
   schema: Joi.object(),
   processors: {
     'processorName': {
-      'fieldName: (input, model) => {
+      fieldName: (input, model) => {
         return Promise.resolve(input+'modification');
       }
     }
