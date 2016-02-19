@@ -177,9 +177,10 @@ SELECT * FROM #TempTest;`);
     .then((db) => {
       request = new mssql.Request(db);
       request.multiple = true;
-      return Table.insert({FIRST_NAME: 'Nathan', LAST_NAME: 'Fritz'})
+      return Table.insert({FIRST_NAME: 'Nathan', LAST_NAME: 'Fritz'}, 'LAST_NAME')
     })
-    .then(() => {
+    .then((results) => {
+      expect(results[0].LAST_NAME).to.equal('Fritz');
       return Table.select()
     })
     .then((results) => {

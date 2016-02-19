@@ -198,7 +198,7 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
     });
   }
 
-  _getPreparedArgs(args) {
+  _getPreparedArgs(args, outputField) {
     args = args || {};
     return this.getDB()
     .then((db) => {
@@ -218,6 +218,9 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
         }
         ps.input(key, this.tableDefinition[key], args[key]);
       }
+      if (outputField) {
+        ps.output(outputField, this.tableDefinition[outputField]);
+      }
       return Promise.resolve({ps, args, keys});
     });
   }
@@ -227,7 +230,7 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
       ps.prepare(query, (err, recordset) => {
         /* $lab:coverage:off$ */
         if (err) {
-          return reject(`Could not prepare query: ${query} (${err.message})`);
+          return reject(new Error(`Could not prepare query: ${query} (${err.message})`));
         }
         /* $lab:coverage:on$ */
         resolve();
@@ -314,17 +317,17 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
 
     if (!onlySelect) {
       this.insert = (args, inserted) => {
-        return this._getPreparedArgs(args)
+        return this._getPreparedArgs(args, inserted)
         .then((psArgsKeys) => {
           const args = psArgsKeys.args;
           const ps = psArgsKeys.ps;
           const keys = psArgsKeys.keys;
           let query = `INSERT INTO [${this.tableName}] `;
+          query += `( ${keys.map(key => '[' + key + ']').join(', ')} ) `;
           if (inserted) {
-            query += `OUTPUT INSERTED.${inserted} `;
-            ps.output(inserted, this.tableDefinition[inserted]);
+            query += `OUTPUT INSERTED.[${inserted}] `;
           }
-          query += `( ${keys.map(key => '[' + key + ']').join(', ')} ) VALUES (${keys.map(key => '@' + key).join(', ')})`;
+          query += `VALUES (${keys.map(key => '@' + key).join(', ')})`;
           return this._queryTable(ps, args, query);
         });
       }
