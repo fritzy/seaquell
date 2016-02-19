@@ -224,7 +224,7 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
       ps.prepare(query, (err, recordset) => {
         /* $lab:coverage:off$ */
         if (err) {
-          return reject(err);
+          return reject(`Could not prepare query: ${query} (${err.message})`);
         }
         /* $lab:coverage:on$ */
         resolve();
