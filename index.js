@@ -184,6 +184,9 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
       for (const row of r) {
         if (typeof dataCall[row.DATA_TYPE] !== 'undefined') {
           const callArgs = dataCall[row.DATA_TYPE].map((col) => {
+            if (col === 'CHARACTER_MAXIMUM_LENGTH' && row[col] === -1) {
+              row[col] = undefined;
+            }
             return row[col];
           });
           this.tableDefinition[row.COLUMN_NAME] = dataTypes[row.DATA_TYPE].apply(mssql, callArgs);
@@ -309,7 +312,7 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
           const ps = psArgsKeys.ps;
           const keys = psArgsKeys.keys;
           let query = `INSERT INTO [${this.tableName}] (
-            ${keys.join(', ')} ) VALUES (${keys.map(key => '@' + key).join(', ')})`;
+            ${keys.map(key => '[' + key + ']').join(', ')} ) VALUES (${keys.map(key => '@' + key).join(', ')})`;
           return this._queryTable(ps, args, query);
         });
       }
