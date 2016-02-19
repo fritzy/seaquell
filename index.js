@@ -322,7 +322,7 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
           let query = `INSERT INTO [${this.tableName}] `;
           if (inserted) {
             query += `OUTPUT INSERTED.${inserted} `;
-            ps.output(key, this.tableDefinition[key]);
+            ps.output(inserted, this.tableDefinition[inserted]);
           }
           query += `( ${keys.map(key => '[' + key + ']').join(', ')} ) VALUES (${keys.map(key => '@' + key).join(', ')})`;
           return this._queryTable(ps, args, query);
