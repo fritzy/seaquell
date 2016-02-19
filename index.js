@@ -124,6 +124,22 @@ class Model extends wadofgum.mixin(wadofgumValidation, wadofgumProcess) {
     this.mssql = null;
   }
 
+  setView (vname) {
+    return this.getDB()
+    .then((db) => {
+      const request = new mssql.Request(db);
+      return new Promise((resolve, reject) => {
+        request.query(`SELECT * FROM sys.columns c, sys.views v WHERE c.object_id = v.object_id`, (err, r) => {
+            //AND t.name = 'fyi_links_top'`, (err, r) => {
+          /* $lab:coverage:off$ */
+          if (err) return reject(err);
+          /* $lab:coverage:on$ */
+          return resolve(r);
+        })
+      });
+    })
+  }
+
   setTable (tname) {
     return this.getDB()
     .then((db) => {
@@ -199,7 +215,7 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
   }
 
   createQueries() {
-    this.select = (args) => {
+    this.select = (args, page) => {
       return this._getPreparedArgs(args)
       .then((psArgsKeys) => {
         const args = psArgsKeys.args;
@@ -209,6 +225,9 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
         if (keys.length > 0) {
           query += ` WHERE `
           query += keys.map(key => `[${key}] = @${key}`).join(' AND ');
+        }
+        if (page) {
+          query += ` LIMIT ${page.limit} OFFSET ${page.offset}`;
         }
         return this._queryTable(ps, args, query)
         .then((recordset) => {

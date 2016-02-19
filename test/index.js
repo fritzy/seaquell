@@ -169,10 +169,20 @@ SELECT * FROM #TempTest;`);
     }).catch((err) => { console.log(err.stack); });
   });
 
+  lab.test('use view funcs', {timeout: 3000}, (done) => {
+    let request;
+    Test.setView('something')
+    .then((result) => {
+        console.log(result);
+        done();
+    });
+  });
+
   lab.test('use table funcs', {timeout: 6000}, (done) => {
     let request;
     Test.getDB()
     .then((db) => {
+        console.log(1);
       request = new mssql.Request(db);
       request.multiple = true;
       return Table.insert({FIRST_NAME: 'Nathan', LAST_NAME: 'Fritz'})
@@ -208,7 +218,7 @@ SELECT * FROM #TempTest;`);
       return request.query('DROP TABLE TempTest2', (err, results) => {
         done();
       });
-    });
+    }).catch(done);
   });
 
   
