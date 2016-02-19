@@ -158,31 +158,23 @@ SELECT * FROM #TempTest;`);
     .then((db) => {
       request = new mssql.Request(db);
       request.multiple = true;
-      request.query(`if exists (select * from sysobjects where name='TempTest2' and xtype='U')
-                    DROP TABLE TempTest2;
-                    CREATE TABLE TempTest2 (id BigInt, FIRST_NAME VARCHAR(50), LAST_NAME VARCHAR(50));`)
+      return request.query(`if exists (select * from sysobjects where name='TempTest2' and xtype='U')
+      DROP TABLE TempTest2`);
+    }).then(() => {
+      return request.query(`CREATE TABLE TempTest2 (id BigInt, FIRST_NAME VARCHAR(50), LAST_NAME VARCHAR(50));`);
     })
     .then(() => {
       return Table.setTable('TempTest2').then(() => {
         done();
       });
-    }).catch((err) => { console.log(err.stack); });
+    }).catch(done);
   });
 
-  lab.test('use view funcs', {timeout: 3000}, (done) => {
-    let request;
-    Test.setView('something')
-    .then((result) => {
-        console.log(result);
-        done();
-    });
-  });
 
   lab.test('use table funcs', {timeout: 6000}, (done) => {
     let request;
     Test.getDB()
     .then((db) => {
-        console.log(1);
       request = new mssql.Request(db);
       request.multiple = true;
       return Table.insert({FIRST_NAME: 'Nathan', LAST_NAME: 'Fritz'})
@@ -204,6 +196,12 @@ SELECT * FROM #TempTest;`);
       return Table.update({FIRST_NAME: 'Leo'}, {LAST_NAME: 'Sagat'});
     })
     .then(() => {
+      return Table.select({}, {offset: 0, limit:1, orderBy: 'LAST_NAME'});
+    })
+    .then((results) => {
+      expect(results[0].LAST_NAME).to.equal('Fritz');
+    })
+    .then(() => {
       return Table.select({LAST_NAME: 'Sagat'})
     })
     .then((results) => {
@@ -214,13 +212,98 @@ SELECT * FROM #TempTest;`);
       return Table.select({LAST_NAME: 'Fritz'})
     })
     .then((results) => {
+      done();
       expect(results.length).to.equal(0);
-      return request.query('DROP TABLE TempTest2', (err, results) => {
-        done();
-      });
+    }).catch(done);
+  });
+  
+  lab.test('write a bad query', (done) => {
+    Table.select({'\'derping': 1})
+    .then(() => {
+      done(new Error('this shouldn\'t happen'));
+    })
+    .catch((err) => {
+      //expect(err.message).to.equal('No columns found for view derping');
+      done();
+    });
+  });
+  
+  
+  lab.test('load a non-existant model', (done) => {
+    expect(() => {
+      Table.getModel('nothere');
+    }).to.throw();
+    done();
+  });
+
+  lab.test('use view funcs', {timeout: 3000}, (done) => {
+    let request;
+    const TestView = new Seaquell.Model();
+    Test.getDB()
+    .then((db) => {
+      request = new mssql.Request(db);
+      request.query('CREATE VIEW TestView AS SELECT id, LAST_NAME as lastName, FIRST_NAME as firstName FROM TempTest2');
+    }).then(() => {
+      return TestView.setView('TestView')
+    })
+    .then(() => {
+      return TestView.select();
+    })
+    .then((results) => {
+      expect(results[0].firstName).to.equal('Leo');
+        return request.query('DROP TABLE TempTest2; DROP VIEW TestView;', (err, results) => {
+          done();
+        });
     }).catch(done);
   });
 
+  lab.test('set a non-existant view', (done) => {
+    const TestView = new Seaquell.Model();
+    TestView.setView('derping')
+    .then(() => {
+      done(new Error('this shouldn\'t happen'));
+    })
+    .catch((err) => {
+      expect(err.message).to.equal('No columns found for view derping');
+      done();
+    });
+  });
+
+  lab.test('set a breaking view', (done) => {
+    const TestView = new Seaquell.Model();
+    TestView.setView('der\'ping')
+    .then(() => {
+      done(new Error('this shouldn\'t happen'));
+    })
+    .catch((err) => {
+      //expect(err.message).to.equal('No columns found for view derping');
+      done();
+    });
+  });
+  
+  lab.test('set a breaking table', (done) => {
+    const TestTable = new Seaquell.Model();
+    TestTable.setTable('der\'ping')
+    .then(() => {
+      done(new Error('this shouldn\'t happen'));
+    })
+    .catch((err) => {
+      //expect(err.message).to.equal('No columns found for view derping');
+      done();
+    });
+  });
+  
+  lab.test('set a non existant table', (done) => {
+    const TestTable = new Seaquell.Model();
+    TestTable.setTable('derping')
+    .then(() => {
+      done(new Error('this shouldn\'t happen'));
+    })
+    .catch((err) => {
+      expect(err.message).to.equal('No columns found for table derping');
+      done();
+    });
+  });
   
   lab.test('create user defined table proc', (done) => {
     Test.getDB()
@@ -799,6 +882,17 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
       expect(model.length).to.equal(0);
       done();
     }).catch(done);
+  });
+  
+  lab.test('connect to bad db', (done) => {
+    const conn = require('../index')({host: 'ham samdfmka'});
+    conn.getDB()
+    .then(() => {
+      done(new Error('this shouldn\'t happen'));
+    })
+    .catch((err) => {
+      done();
+    });
   });
   
   lab.test('disconnect', (done) => {

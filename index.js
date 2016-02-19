@@ -125,16 +125,38 @@ class Model extends wadofgum.mixin(wadofgumValidation, wadofgumProcess) {
   }
 
   setView (vname) {
+    this.tableDefinition = {};
+    this.tableName = vname;
     return this.getDB()
     .then((db) => {
       const request = new mssql.Request(db);
       return new Promise((resolve, reject) => {
-        request.query(`SELECT * FROM sys.columns c, sys.views v WHERE c.object_id = v.object_id`, (err, r) => {
-            //AND t.name = 'fyi_links_top'`, (err, r) => {
-          /* $lab:coverage:off$ */
-          if (err) return reject(err);
-          /* $lab:coverage:on$ */
-          return resolve(r);
+        request.query(`
+          SELECT 
+          c.name as colName,
+          st.name AS colType,
+          c.*
+          FROM sys.columns c
+          INNER JOIN sys.views v ON c.object_id = v.object_id
+          INNER JOIN sys.systypes st ON st.xtype = c.system_type_id AND st.name != 'sysname'
+          WHERE v.name = '${vname}'`, (err, result) => {
+          if (err) {
+            return reject(err);
+          }
+          if (result.length === 0) {
+            reject(new Error(`No columns found for view ${vname}`));
+          }
+          const coltypes = [];
+          for (const row of result) {
+            if (dataUserCall.hasOwnProperty(row.colType)) {
+              const callArgs = dataUserCall[row.colType].map(col => row[col]);
+              this.tableDefinition[row.colName] =  dataTypes[row.colType].apply(mssql, callArgs);
+            } else {
+              this.tableDefinition[row.colName] =  dataTypes[row.colType];
+            }
+          }
+          this.createQueries(true);
+          return resolve();
         })
       });
     })
@@ -148,14 +170,15 @@ class Model extends wadofgum.mixin(wadofgumValidation, wadofgumProcess) {
         request.query(`SELECT *
 FROM INFORMATION_SCHEMA.COLUMNS
 WHERE TABLE_NAME = '${tname}'`, (err, r) => {
-          /* $lab:coverage:off$ */
           if (err) return reject(err);
-          /* $lab:coverage:on$ */
           return resolve(r);
         })
       });
     })
     .then((r) => {
+      if (r.length === 0) {
+        throw new Error(`No columns found for table ${tname}`);
+      }
       this.tableDefinition = {};
       this.tableName = tname;
       for (const row of r) {
@@ -169,7 +192,6 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
         }
       }
       this.createQueries();
-      return Promise.resolve();
     });
   }
 
@@ -214,8 +236,9 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
     });
   }
 
-  createQueries() {
-    this.select = (args, page) => {
+  createQueries(onlySelect) {
+
+    this.select = (args) => {
       return this._getPreparedArgs(args)
       .then((psArgsKeys) => {
         const args = psArgsKeys.args;
@@ -226,9 +249,6 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
           query += ` WHERE `
           query += keys.map(key => `[${key}] = @${key}`).join(' AND ');
         }
-        if (page) {
-          query += ` LIMIT ${page.limit} OFFSET ${page.offset}`;
-        }
         return this._queryTable(ps, args, query)
         .then((recordset) => {
           return Promise.resolve(this._queryResults({}, recordset));
@@ -236,54 +256,60 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
       });
     };
     
-    this.update = (args, where) => {
-      return this.validateAndProcess(where)
-      .then((where) => {
+    if (!onlySelect) {
+      this.update = (args, where) => {
+        return this.validateAndProcess(where)
+        .then((where) => {
+          return this._getPreparedArgs(args)
+          .then((psArgsKeys) => {
+            const args = psArgsKeys.args;
+            const ps = psArgsKeys.ps;
+            const keys = psArgsKeys.keys;
+            const whereKeys = Object.keys(where);
+            for (const key of whereKeys) {
+              ps.input(key, this.tableDefinition[key], args[key]);
+            }
+            let query = `UPDATE [${this.tableName}] SET `;
+            query += keys.map(key => `[${key}] = @${key}`).join(', ');
+            query += ` WHERE `
+            query += whereKeys.map(key => `[${key}] = @${key}`).join(' AND ');
+            const combo = lodash.assign(args, where);
+            return this._queryTable(ps, combo, query)
+            .then((recordset) => {
+              return Promise.resolve();
+            });
+          });
+        });
+      };
+    }
+    
+    if (!onlySelect) {
+      this.delete = (args) => {
         return this._getPreparedArgs(args)
         .then((psArgsKeys) => {
           const args = psArgsKeys.args;
           const ps = psArgsKeys.ps;
           const keys = psArgsKeys.keys;
-          const whereKeys = Object.keys(where);
-          for (const key of whereKeys) {
-            ps.input(key, this.tableDefinition[key], args[key]);
-          }
-          let query = `UPDATE [${this.tableName}] SET `;
-          query += keys.map(key => `[${key}] = @${key}`).join(', ');
+          let query = `DELETE  FROM [${this.tableName}]`;
           query += ` WHERE `
-          query += whereKeys.map(key => `[${key}] = @${key}`).join(' AND ');
-          const combo = lodash.assign(args, where);
-          return this._queryTable(ps, combo, query)
-          .then((recordset) => {
-            return Promise.resolve();
-          });
+          query += keys.map(key => `[${key}] = @${key}`).join(' AND ');
+          return this._queryTable(ps, args, query);
         });
-      });
-    };
-    
-    this.delete = (args) => {
-      return this._getPreparedArgs(args)
-      .then((psArgsKeys) => {
-        const args = psArgsKeys.args;
-        const ps = psArgsKeys.ps;
-        const keys = psArgsKeys.keys;
-        let query = `DELETE  FROM [${this.tableName}]`;
-        query += ` WHERE `
-        query += keys.map(key => `[${key}] = @${key}`).join(' AND ');
-        return this._queryTable(ps, args, query);
-      });
-    };
+      };
+    }
 
-    this.insert = (args) => {
-      return this._getPreparedArgs(args)
-      .then((psArgsKeys) => {
-        const args = psArgsKeys.args;
-        const ps = psArgsKeys.ps;
-        const keys = psArgsKeys.keys;
-        let query = `INSERT INTO [${this.tableName}] (
-          ${keys.join(', ')} ) VALUES (${keys.map(key => '@' + key).join(', ')})`;
-        return this._queryTable(ps, args, query);
-      });
+    if (!onlySelect) {
+      this.insert = (args) => {
+        return this._getPreparedArgs(args)
+        .then((psArgsKeys) => {
+          const args = psArgsKeys.args;
+          const ps = psArgsKeys.ps;
+          const keys = psArgsKeys.keys;
+          let query = `INSERT INTO [${this.tableName}] (
+            ${keys.join(', ')} ) VALUES (${keys.map(key => '@' + key).join(', ')})`;
+          return this._queryTable(ps, args, query);
+        });
+      }
     }
   }
 
@@ -301,6 +327,9 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
   getModel (mname) {
     if (mname instanceof Model) {
       return mname;
+    }
+    if (!cached_models.hasOwnProperty(mname)) {
+      throw new Error(`The model "${mname}" doesn't exist.`);
     }
     return cached_models[mname];
   }
@@ -525,9 +554,7 @@ order by c.column_id`, (err, result) => {
       const util = require('util');
       opts.args = inputs;
       this[opts.name] = function (obj, args) {
-        /* $lab:coverage:off$ */
         args = args || {};
-        /* $lab:coverage:on$ */
         const pm = this.validateAndProcess(obj, 'toDB');
         let db;
         return this.getDB()
@@ -616,21 +643,35 @@ order by c.column_id`, (err, result) => {
 module.exports = (mssql_config) => {
 
   let mssql_conn;
+  let db_connecting = false;
+  let connected_list = [];
 
   getDB = () => {
-    return new Promise((resolve, reject) => {
-      if (!mssql_conn)  {
-        const conn = new mssql.Connection(mssql_config, (err) => {
-          /* $lab:coverage:off$ */
-          if (err) return reject(err);
-          /* $lab:coverage:on$ */
-          mssql_conn = conn;
-          return resolve(mssql_conn);
+    if (!mssql_conn)  {
+      if (db_connecting) {
+        return new Promise((resolve, reject) => {
+          connected_list.push((db) => {
+            resolve(db);
+          });
         });
       } else {
-        return resolve(mssql_conn);
+        db_connecting = true;
+        return new Promise((resolve, reject) => {
+          const conn = new mssql.Connection(mssql_config, (err) => {
+            if (err) return reject(err);
+            mssql_conn = conn;
+            while (connected_list.length > 0) {
+              const cb = connected_list.pop();
+              cb(mssql_conn);
+            }
+            db_connecting = false;
+            return resolve(mssql_conn);
+          });
+        });
       }
-    });
+    } else {
+      return Promise.resolve(mssql_conn);
+    }
   };
 
   return {
