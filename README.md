@@ -2,6 +2,8 @@
 
 ![Seagull Waterbender Moses](https://cldup.com/xBEt5glGHQ.png)
 
+[![npm version](https://badge.fury.io/js/sqlmoses.svg)](http://badge.fury.io/js/sqlmoses)
+
 A [pure function](http://www.nicoespeon.com/en/2015/01/pure-functions-javascript/) model class for MS SQL Server.
 
 Methods are passed a normal object and respond with a new object.
