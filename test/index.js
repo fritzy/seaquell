@@ -12,9 +12,9 @@ process.on('uncaughtException', function (err) {
   console.log(err.stack);
 });
 
-const Seaquell = require('../index')(config.mssql);
+const Squawk = require('../index')(config.mssql);
 
-const Test = new Seaquell.Model({
+const Test = new Squawk.Model({
   name: 'Test',
   schema: Joi.object()
     .rename('FIRST_NAME', 'FirstName', {ignoreUndefined: true})
@@ -151,7 +151,7 @@ SELECT * FROM #TempTest;`);
   let Table;
 
   lab.test('create table funcs', (done) => {
-    Table = new Seaquell.Model();
+    Table = new Squawk.Model();
     let request;
   
     Test.getDB()
@@ -238,7 +238,7 @@ SELECT * FROM #TempTest;`);
 
   lab.test('use view funcs', {timeout: 3000}, (done) => {
     let request;
-    const TestView = new Seaquell.Model();
+    const TestView = new Squawk.Model();
     Test.getDB()
     .then((db) => {
       request = new mssql.Request(db);
@@ -258,7 +258,7 @@ SELECT * FROM #TempTest;`);
   });
 
   lab.test('set a non-existant view', (done) => {
-    const TestView = new Seaquell.Model();
+    const TestView = new Squawk.Model();
     TestView.setView('derping')
     .then(() => {
       done(new Error('this shouldn\'t happen'));
@@ -270,7 +270,7 @@ SELECT * FROM #TempTest;`);
   });
 
   lab.test('set a breaking view', (done) => {
-    const TestView = new Seaquell.Model();
+    const TestView = new Squawk.Model();
     TestView.setView('der\'ping')
     .then(() => {
       done(new Error('this shouldn\'t happen'));
@@ -282,7 +282,7 @@ SELECT * FROM #TempTest;`);
   });
   
   lab.test('set a breaking table', (done) => {
-    const TestTable = new Seaquell.Model();
+    const TestTable = new Squawk.Model();
     TestTable.setTable('der\'ping')
     .then(() => {
       done(new Error('this shouldn\'t happen'));
@@ -294,7 +294,7 @@ SELECT * FROM #TempTest;`);
   });
   
   lab.test('set a non existant table', (done) => {
-    const TestTable = new Seaquell.Model();
+    const TestTable = new Squawk.Model();
     TestTable.setTable('derping')
     .then(() => {
       done(new Error('this shouldn\'t happen'));
@@ -450,7 +450,7 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
   });
 
   lab.test('map many result sets', (done) => {
-    const Person = new Seaquell.Model({
+    const Person = new Squawk.Model({
       map: {
         books: {collection: 'Book', local: 'id', remote: 'person_id'},
         cars: {collection: 'Car', local: 'id', remote: 'person_id'},
@@ -460,19 +460,19 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
       },
       name: 'Person',
     });
-    const Book = new Seaquell.Model({
+    const Book = new Squawk.Model({
       name: 'Book',
     });
-    const Car = new Seaquell.Model({
+    const Car = new Squawk.Model({
       name: 'Car',
     });
-    const Job = new Seaquell.Model({
+    const Job = new Squawk.Model({
       name: 'Job',
     });
-    const Child = new Seaquell.Model({
+    const Child = new Squawk.Model({
       name: 'Child',
     });
-    const Trait = new Seaquell.Model({
+    const Trait = new Squawk.Model({
       name: 'Trait',
     });
     Person.mapProcedure({
@@ -494,7 +494,7 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
    
 
   lab.test('bad mapping of result sets', (done) => {
-    const Person = Seaquell.getModel('Person');
+    const Person = Squawk.getModel('Person');
     Person.mapProcedure({
       static: true,
       name: 'manyresults',
@@ -592,7 +592,7 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
     Test.getuno({LAST_NAME: 'Derpy'}).then((results) => {
       done('should have errored');
     }).catch((err) => {
-      expect(err).to.be.an.instanceof(Seaquell.EmptyResult);
+      expect(err).to.be.an.instanceof(Squawk.EmptyResult);
       done();
     });
   });
@@ -606,8 +606,8 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
   });
 
   lab.test('join multi collection', (done) => {
-    const Item = new Seaquell.Model({ name: 'jm_item' });
-    const Name = new Seaquell.Model({
+    const Item = new Squawk.Model({ name: 'jm_item' });
+    const Name = new Squawk.Model({
       map: {
         items: { collection: 'jm_item', local: 'id', 'remote': 'name_id' }
       },
@@ -629,8 +629,8 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
   });
 
   lab.test('join multi model', (done) => {
-    const Item = new Seaquell.Model({name: 'jm_item2'});
-    const Name = new Seaquell.Model({
+    const Item = new Squawk.Model({name: 'jm_item2'});
+    const Name = new Squawk.Model({
       map: {
         'item': { model: 'jm_item2', local: 'id', 'remote': 'name_id' }
       },
@@ -654,7 +654,7 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
 
 
   lab.test('get model', (done) => {
-    const model = Seaquell.getModel('Test');
+    const model = Squawk.getModel('Test');
     done();
   });
 
@@ -780,17 +780,17 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
     Test.getnone().then((model) => {
       done('Should Have Errored');
     }).catch((err) => {
-      expect(err).to.be.an.instanceof(Seaquell.EmptyResult);
+      expect(err).to.be.an.instanceof(Squawk.EmptyResult);
       done();
     });
   });
   
   lab.test('custom type method', (done) => {
-    const HasSubType = new Seaquell.Model({
+    const HasSubType = new Squawk.Model({
       id: {},
       SomeSub: {collection: 'UserType'}
     });
-    const UserType = new Seaquell.Model({
+    const UserType = new Squawk.Model({
       a: {},
       b: {}
     }, {
@@ -837,7 +837,7 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
   });
 
   lab.test('inDB outDB processor', (done) => {
-      const Model = new Seaquell.Model({
+      const Model = new Squawk.Model({
         processors: {
           fromDB: {
             firstName: function (value) {

@@ -1,4 +1,4 @@
-# Seaquell
+# Squawk
 
 ![Seagull Waterbender Moses](https://cldup.com/xBEt5glGHQ.png)
 
@@ -20,18 +20,18 @@ You can always bind a raw query or prepared statement of your design as well.
 'use strict';
 
 const mssql = require('mssql');
-const Seaquell = require('seaquell')({
+const Squawk = require('squawk')({
   "user": "sa",
   "password": "password",
   "server": "localhost",
-  "database": "seaquell_test",
+  "database": "squawk_test",
   "pool": {
     "min": 3,
     "max": 10
   }
 });
 
-const Test = new Seaquell.Model({
+const Test = new Squawk.Model({
   name: 'test',
   schema: Joi.object({
     FirstName: joi.string(),
@@ -75,13 +75,13 @@ Test.mapProcedure({
 
 ## Install
 
-[![npm i seaquell](https://nodei.co/npm/seaquell.png)](https://npmjs.org/packages/seaquell)
+[![npm i squawk](https://nodei.co/npm/squawk.png)](https://npmjs.org/packages/squawk)
 
 
 ## Creating a Model 
 
 ```js
-new Seaquell.Model({
+new Squawk.Model({
   name: 'someModel'
   map: {
     someField: {
@@ -120,7 +120,7 @@ __mapStatement__(opts)
 opts: {
   name: (String) name of method,
   args: [ //input parameters for the prepared statement
-    [String() name of parameter, mssql.type a valid mssql type or Seaquell.TVP()],
+    [String() name of parameter, mssql.type a valid mssql type or Squawk.TVP()],
     [string, type],
     ...
   ],
@@ -233,13 +233,13 @@ Runs processing tags against .processors resulting in a new object from a Promis
 
 Runs both validation and processors resulting in a new object from a Promise.
 
-### Seaquell.getModel(name)
+### Squawk.getModel(name)
 
 __model.getModel(name)__
 
 Returns the model named 'name';
 
-### Seaquell.TVP(types)
+### Squawk.TVP(types)
 
 Allows you to use a Table Value Parameter as an input to a Stored Procedure
 
@@ -248,9 +248,9 @@ Similar to "args" in mapProcedure, the types argument is an array of arrays.
 ####Usage
 
 ```js
-const Book = new Seaquell.Model({
+const Book = new Squawk.Model({
 });
-const Author = new Seaquell.Model({
+const Author = new Squawk.Model({
   map: {
     books: {collection: 'Book'}
   }
@@ -259,7 +259,7 @@ const Author = new Seaquell.Model({
 Author.mapProcedure({
   args: [
     ['name', mssql.NVarChar(50)],
-    ['books', Seaquell.TVP([
+    ['books', Squawk.TVP([
       'title', mssql.NVarChar(50)
     ])]
   ],
