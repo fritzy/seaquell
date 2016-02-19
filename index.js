@@ -237,7 +237,15 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
       return ps.execute(args)
       .then((recordset) => {
         ps.unprepare();
-        return Promise.resolve(recordset);
+        if (Array.isArray(recordset)) {
+          const pms = [];
+          for (let record of recordset) {
+            pms.push(this.validateAndProcess(record));
+          }
+          return Promise.all(pms);
+        } else {
+          return Promise.resolve(recordset);
+        }
       });
     });
   }
@@ -314,6 +322,7 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
           let query = `INSERT INTO [${this.tableName}] `;
           if (inserted) {
             query += `OUTPUT INSERTED.${inserted} `;
+            ps.output(key, this.tableDefinition[key]);
           }
           query += `( ${keys.map(key => '[' + key + ']').join(', ')} ) VALUES (${keys.map(key => '@' + key).join(', ')})`;
           return this._queryTable(ps, args, query);
