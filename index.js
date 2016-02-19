@@ -240,7 +240,7 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
         if (Array.isArray(recordset)) {
           const pms = [];
           for (let record of recordset) {
-            pms.push(this.validateAndProcess(record));
+            pms.push(this.validateAndProcess(record, 'fromDB'));
           }
           return Promise.all(pms);
         } else {
