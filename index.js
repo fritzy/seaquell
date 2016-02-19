@@ -144,7 +144,7 @@ class Model extends wadofgum.mixin(wadofgumValidation, wadofgumProcess) {
             return reject(err);
           }
           if (result.length === 0) {
-            reject(new Error(`No columns found for view ${vname}`));
+            reject(new Error(`No columns found for view ${vname}. Does this user have permission to see this view?`));
           }
           const coltypes = [];
           for (const row of result) {
@@ -177,7 +177,7 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
     })
     .then((r) => {
       if (r.length === 0) {
-        throw new Error(`No columns found for table ${tname}`);
+        throw new Error(`No columns found for table ${tname} or this user does not have permission to see this table.`);
       }
       this.tableDefinition = {};
       this.tableName = tname;
@@ -210,6 +210,9 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
       const ps = psAndArgs.ps;
       const keys = Object.keys(args);
       for (const key of keys) {
+        if (!this.tableDefinition.hasOwnProperty(key)) {
+            return Promise.reject(new Error(`Could not find column for ${key} in ${this.tableName}. Either doesn't exist, the type is unsupported, or this user doesn't have access to this table.`));
+        }
         ps.input(key, this.tableDefinition[key], args[key]);
       }
       return Promise.resolve({ps, args, keys});
@@ -329,7 +332,7 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
       return mname;
     }
     if (!cached_models.hasOwnProperty(mname)) {
-      throw new Error(`The model "${mname}" doesn't exist.`);
+      throw new Error(`The model "${mname}" doesn't exist or this user doesn't have permission to see it.`);
     }
     return cached_models[mname];
   }
