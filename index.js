@@ -305,14 +305,17 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
     }
 
     if (!onlySelect) {
-      this.insert = (args) => {
+      this.insert = (args, inserted) => {
         return this._getPreparedArgs(args)
         .then((psArgsKeys) => {
           const args = psArgsKeys.args;
           const ps = psArgsKeys.ps;
           const keys = psArgsKeys.keys;
-          let query = `INSERT INTO [${this.tableName}] (
-            ${keys.map(key => '[' + key + ']').join(', ')} ) VALUES (${keys.map(key => '@' + key).join(', ')})`;
+          let query = `INSERT INTO [${this.tableName}] `;
+          if (inserted) {
+            query += `OUTPUT INSERTED.${inserted} `;
+          }
+          query += `( ${keys.map(key => '[' + key + ']').join(', ')} ) VALUES (${keys.map(key => '@' + key).join(', ')})`;
           return this._queryTable(ps, args, query);
         });
       }
