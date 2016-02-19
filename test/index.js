@@ -12,9 +12,9 @@ process.on('uncaughtException', function (err) {
   console.log(err.stack);
 });
 
-const Squawk = require('../index')(config.mssql);
+const SQLMoses = require('../index')(config.mssql);
 
-const Test = new Squawk.Model({
+const Test = new SQLMoses.Model({
   name: 'Test',
   schema: Joi.object()
     .rename('FIRST_NAME', 'FirstName', {ignoreUndefined: true})
@@ -151,7 +151,7 @@ SELECT * FROM #TempTest;`);
   let Table;
 
   lab.test('create table funcs', (done) => {
-    Table = new Squawk.Model();
+    Table = new SQLMoses.Model();
     let request;
   
     Test.getDB()
@@ -238,7 +238,7 @@ SELECT * FROM #TempTest;`);
 
   lab.test('use view funcs', {timeout: 3000}, (done) => {
     let request;
-    const TestView = new Squawk.Model();
+    const TestView = new SQLMoses.Model();
     Test.getDB()
     .then((db) => {
       request = new mssql.Request(db);
@@ -258,19 +258,18 @@ SELECT * FROM #TempTest;`);
   });
 
   lab.test('set a non-existant view', (done) => {
-    const TestView = new Squawk.Model();
+    const TestView = new SQLMoses.Model();
     TestView.setView('derping')
     .then(() => {
       done(new Error('this shouldn\'t happen'));
     })
     .catch((err) => {
-      expect(err.message).to.equal('No columns found for view derping');
       done();
     });
   });
 
   lab.test('set a breaking view', (done) => {
-    const TestView = new Squawk.Model();
+    const TestView = new SQLMoses.Model();
     TestView.setView('der\'ping')
     .then(() => {
       done(new Error('this shouldn\'t happen'));
@@ -282,7 +281,7 @@ SELECT * FROM #TempTest;`);
   });
   
   lab.test('set a breaking table', (done) => {
-    const TestTable = new Squawk.Model();
+    const TestTable = new SQLMoses.Model();
     TestTable.setTable('der\'ping')
     .then(() => {
       done(new Error('this shouldn\'t happen'));
@@ -294,13 +293,12 @@ SELECT * FROM #TempTest;`);
   });
   
   lab.test('set a non existant table', (done) => {
-    const TestTable = new Squawk.Model();
+    const TestTable = new SQLMoses.Model();
     TestTable.setTable('derping')
     .then(() => {
       done(new Error('this shouldn\'t happen'));
     })
     .catch((err) => {
-      expect(err.message).to.equal('No columns found for table derping');
       done();
     });
   });
@@ -450,7 +448,7 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
   });
 
   lab.test('map many result sets', (done) => {
-    const Person = new Squawk.Model({
+    const Person = new SQLMoses.Model({
       map: {
         books: {collection: 'Book', local: 'id', remote: 'person_id'},
         cars: {collection: 'Car', local: 'id', remote: 'person_id'},
@@ -460,19 +458,19 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
       },
       name: 'Person',
     });
-    const Book = new Squawk.Model({
+    const Book = new SQLMoses.Model({
       name: 'Book',
     });
-    const Car = new Squawk.Model({
+    const Car = new SQLMoses.Model({
       name: 'Car',
     });
-    const Job = new Squawk.Model({
+    const Job = new SQLMoses.Model({
       name: 'Job',
     });
-    const Child = new Squawk.Model({
+    const Child = new SQLMoses.Model({
       name: 'Child',
     });
-    const Trait = new Squawk.Model({
+    const Trait = new SQLMoses.Model({
       name: 'Trait',
     });
     Person.mapProcedure({
@@ -494,7 +492,7 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
    
 
   lab.test('bad mapping of result sets', (done) => {
-    const Person = Squawk.getModel('Person');
+    const Person = SQLMoses.getModel('Person');
     Person.mapProcedure({
       static: true,
       name: 'manyresults',
@@ -592,7 +590,7 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
     Test.getuno({LAST_NAME: 'Derpy'}).then((results) => {
       done('should have errored');
     }).catch((err) => {
-      expect(err).to.be.an.instanceof(Squawk.EmptyResult);
+      expect(err).to.be.an.instanceof(SQLMoses.EmptyResult);
       done();
     });
   });
@@ -606,8 +604,8 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
   });
 
   lab.test('join multi collection', (done) => {
-    const Item = new Squawk.Model({ name: 'jm_item' });
-    const Name = new Squawk.Model({
+    const Item = new SQLMoses.Model({ name: 'jm_item' });
+    const Name = new SQLMoses.Model({
       map: {
         items: { collection: 'jm_item', local: 'id', 'remote': 'name_id' }
       },
@@ -629,8 +627,8 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
   });
 
   lab.test('join multi model', (done) => {
-    const Item = new Squawk.Model({name: 'jm_item2'});
-    const Name = new Squawk.Model({
+    const Item = new SQLMoses.Model({name: 'jm_item2'});
+    const Name = new SQLMoses.Model({
       map: {
         'item': { model: 'jm_item2', local: 'id', 'remote': 'name_id' }
       },
@@ -654,7 +652,7 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
 
 
   lab.test('get model', (done) => {
-    const model = Squawk.getModel('Test');
+    const model = SQLMoses.getModel('Test');
     done();
   });
 
@@ -780,17 +778,17 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
     Test.getnone().then((model) => {
       done('Should Have Errored');
     }).catch((err) => {
-      expect(err).to.be.an.instanceof(Squawk.EmptyResult);
+      expect(err).to.be.an.instanceof(SQLMoses.EmptyResult);
       done();
     });
   });
   
   lab.test('custom type method', (done) => {
-    const HasSubType = new Squawk.Model({
+    const HasSubType = new SQLMoses.Model({
       id: {},
       SomeSub: {collection: 'UserType'}
     });
-    const UserType = new Squawk.Model({
+    const UserType = new SQLMoses.Model({
       a: {},
       b: {}
     }, {
@@ -837,7 +835,7 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
   });
 
   lab.test('inDB outDB processor', (done) => {
-      const Model = new Squawk.Model({
+      const Model = new SQLMoses.Model({
         processors: {
           fromDB: {
             firstName: function (value) {

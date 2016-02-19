@@ -1,5 +1,5 @@
 {
-  "name": "squawk",
+  "name": "sqlmoses",
   "version": "1.0.0",
   "description": "A Reverse ORM for MS SQL",
   "main": "index.js",

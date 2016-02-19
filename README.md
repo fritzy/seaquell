@@ -1,4 +1,4 @@
-# Squawk
+# SQLMoses
 
 ![Seagull Waterbender Moses](https://cldup.com/xBEt5glGHQ.png)
 
@@ -19,19 +19,18 @@ You can always bind a raw query or prepared statement of your design as well.
 ```javascript
 'use strict';
 
-const mssql = require('mssql');
-const Squawk = require('squawk')({
+const SQLMoses = require('sqlmoses')({
   "user": "sa",
   "password": "password",
   "server": "localhost",
-  "database": "squawk_test",
+  "database": "sqlmoses_test",
   "pool": {
     "min": 3,
     "max": 10
   }
 });
 
-const Test = new Squawk.Model({
+const Test = new SQLMoses.Model({
   name: 'test',
   schema: Joi.object({
     FirstName: joi.string(),
@@ -75,13 +74,13 @@ Test.mapProcedure({
 
 ## Install
 
-[![npm i squawk](https://nodei.co/npm/squawk.png)](https://npmjs.org/packages/squawk)
+[![npm i sqlmoses](https://nodei.co/npm/sqlmoses.png)](https://npmjs.org/packages/sqlmoses)
 
 
 ## Creating a Model 
 
 ```js
-new Squawk.Model({
+new SQLMoses.Model({
   name: 'someModel'
   map: {
     someField: {
@@ -120,7 +119,7 @@ __mapStatement__(opts)
 opts: {
   name: (String) name of method,
   args: [ //input parameters for the prepared statement
-    [String() name of parameter, mssql.type a valid mssql type or Squawk.TVP()],
+    [String() name of parameter, mssql.type a valid mssql type or SQLMoses.TVP()],
     [string, type],
     ...
   ],
@@ -233,13 +232,13 @@ Runs processing tags against .processors resulting in a new object from a Promis
 
 Runs both validation and processors resulting in a new object from a Promise.
 
-### Squawk.getModel(name)
+### SQLMoses.getModel(name)
 
 __model.getModel(name)__
 
 Returns the model named 'name';
 
-### Squawk.TVP(types)
+### SQLMoses.TVP(types)
 
 Allows you to use a Table Value Parameter as an input to a Stored Procedure
 
@@ -248,9 +247,9 @@ Similar to "args" in mapProcedure, the types argument is an array of arrays.
 ####Usage
 
 ```js
-const Book = new Squawk.Model({
+const Book = new SQLMoses.Model({
 });
-const Author = new Squawk.Model({
+const Author = new SQLMoses.Model({
   map: {
     books: {collection: 'Book'}
   }
@@ -259,7 +258,7 @@ const Author = new Squawk.Model({
 Author.mapProcedure({
   args: [
     ['name', mssql.NVarChar(50)],
-    ['books', Squawk.TVP([
+    ['books', SQLMoses.TVP([
       'title', mssql.NVarChar(50)
     ])]
   ],
