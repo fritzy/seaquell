@@ -602,6 +602,7 @@ order by c.column_id`, (err, result) => {
       opts.args = inputs;
       opts.output = outputs;
       this[opts.name] = function (obj, args) {
+        obj = obj || {};
         args = args || {};
         const pm = this.validateAndProcess(obj, 'toDB');
         let db;
