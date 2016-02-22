@@ -161,7 +161,7 @@ SELECT * FROM #TempTest;`);
       return request.query(`if exists (select * from sysobjects where name='TempTest2' and xtype='U')
       DROP TABLE TempTest2`);
     }).then(() => {
-      return request.query(`CREATE TABLE TempTest2 (id BigInt, FIRST_NAME VARCHAR(50), LAST_NAME VARCHAR(50));`);
+      return request.query(`CREATE TABLE TempTest2 (id BigInt, FIRST_NAME VARCHAR(50), LAST_NAME VARCHAR(MAX));`);
     })
     .then(() => {
       return Table.setTable('TempTest2').then(() => {

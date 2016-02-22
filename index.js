@@ -186,7 +186,7 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
         if (typeof dataCall[row.DATA_TYPE] !== 'undefined') {
           const callArgs = dataCall[row.DATA_TYPE].map((col) => {
             if (col === 'CHARACTER_MAXIMUM_LENGTH' && row[col] === -1) {
-              row[col] = undefined;
+              return undefined;
             }
             return row[col];
           });
@@ -505,11 +505,9 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
         request.input(field, argdef, args[field]);
       }
     });
-    if (Array.isArray(opts.output)) {
-      opts.output.forEach((arg) => {
-        request.output(arg[0], arg[1]);
-      });
-    }
+    opts.output.forEach((arg) => {
+      request.output(arg[0], arg[1]);
+    });
     return request;
   }
 
