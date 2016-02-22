@@ -84,6 +84,9 @@ Test.mapProcedure({
 ```js
 new SQLMoses.Model({
   name: 'someModel'
+  keyMap: {
+    'renameKey': 'toThis'
+  },
   map: {
     someField: {
       'collection or model': 'otherModelName',
