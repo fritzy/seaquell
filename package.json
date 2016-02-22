@@ -1,6 +1,6 @@
 {
   "name": "sqlmoses",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "A Reverse ORM for MS SQL",
   "main": "index.js",
   "repository": {
