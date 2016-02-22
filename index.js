@@ -3,6 +3,7 @@
 const wadofgum = require('wadofgum');
 const wadofgumValidation = require('wadofgum-validation');
 const wadofgumProcess = require('wadofgum-process');
+const wadofgumKeyMap = require('wadofgum-keymap');
 
 const lodash = require('lodash');
 const assert = require('assert');
@@ -103,7 +104,7 @@ const TVP = (types) => {
 let getDB;
 const cached_models = {};
 
-class Model extends wadofgum.mixin(wadofgumValidation, wadofgumProcess) {
+class Model extends wadofgum.mixin(wadofgumValidation, wadofgumProcess, wadofgumKeyMap) {
 
   constructor (opts) {
     super(opts);
@@ -203,7 +204,7 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
     return this.getDB()
     .then((db) => {
       const request = new mssql.PreparedStatement(db);
-      return this.validateAndProcess(args)
+      return this.validateAndProcess(args, 'toDB')
       .then((args) => {
         return Promise.resolve({ps: request, args});
       });
@@ -275,7 +276,7 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
     
     if (!onlySelect) {
       this.update = (args, where) => {
-        return this.validateAndProcess(where)
+        return this.validateAndProcess(where, 'toDB')
         .then((where) => {
           return this._getPreparedArgs(args)
           .then((psArgsKeys) => {
@@ -335,6 +336,14 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
   }
 
   validateAndProcess(obj, tags) {
+    tags = tags || [];
+    if (typeof tags === 'string') tags = [tags];
+    const tagSet = new Set(tags);
+    if (tagSet.has('toDB')) {
+      obj = this.mapTo(obj);
+    } else if (tagSet.has('fromDB')) {
+      obj = this.mapFrom(obj);
+    }
     if (this.schema) {
       return this.validate(obj)
       .then((obj2) => {

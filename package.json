@@ -12,6 +12,7 @@
     "mssql": "^3.1.0",
     "underscore": "^1.8.3",
     "wadofgum": "^5.1.0",
+    "wadofgum-keymap": "^0.1.1",
     "wadofgum-process": "^0.2.0",
     "wadofgum-validation": "^2.0.0"
   },
