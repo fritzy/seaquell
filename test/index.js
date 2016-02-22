@@ -406,8 +406,10 @@ AS
       request.multiple = true;
       request.query(`IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'manyresults') AND type IN (N'P', N'PC')) DROP PROCEDURE manyresults`).then(() => {
       return request.query(`CREATE PROCEDURE manyresults
-@inputid BigInt
+@inputid BigInt,
+@favorite VARCHAR(50) OUTPUT
 AS
+  SELECT @favorite = 'SOMETHING';
   SELECT * FROM (VALUES (1, 'Nathan Fritz')) x(id, name);
   SELECT * FROM (VALUES (1, 1, 'Derping for Dummies'), (2, 1, 'Predicting the Future')) x(id, person_id, title);
   SELECT * FROM (VALUES (1, 1, 'Subaru', 'BRZ'), (2, 1, 'Subaru', 'Outback'), (3, 1, 'Dodge', 'Durango')) x(id, person_id, make, model);
@@ -481,7 +483,10 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
       resultModels: ['Person', 'Book', 'Car', 'Job', 'Child', 'Trait']
     })
     .then(() => {
-      Person.manyresults({inputid: 7}).then((person) => {
+      Person.manyresults({inputid: 7, favorite: 'me'}).then((results) => {
+        const person = results.result;
+        expect(results.output.favorite).to.equal('SOMETHING');
+
         expect(person.jobs[1].company).to.equal('Watches Watches Watches');
         expect(person.children[0].name).to.equal('Bert');
         expect(person.cars[2].make).to.equal('Dodge');
@@ -514,8 +519,8 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
       FirstName: 'Nathan',
       LastName: 'Fritz',
     }).then((results) => {
-      expect(results.FirstName).to.equal('Nathan');
-      expect(results.LastName).to.equal('Fritz');
+      expect(results.result.FirstName).to.equal('Nathan');
+      expect(results.result.LastName).to.equal('Fritz');
       done();
     });
   });
@@ -526,8 +531,8 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
       LastName: 'Fritzer'
     };
     Test.testproc(test).then((results) => {
-      expect(results.FirstName).to.equal('Nathanael');
-      expect(results.LastName).to.equal('Fritzer');
+      expect(results.result.FirstName).to.equal('Nathanael');
+      expect(results.result.LastName).to.equal('Fritzer');
       done();
     }).catch(done);
   });
@@ -580,9 +585,9 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
   
   lab.test('multi static statement', (done) => {
     Test.multiselect().then((results) => {
-      expect(results[0].FirstName).to.equal('Nathan');
-      expect(results[0].LastName).to.equal('Fritz');
-      expect(results.length).to.equal(3);
+      expect(results.result[0].FirstName).to.equal('Nathan');
+      expect(results.result[0].LastName).to.equal('Fritz');
+      expect(results.result.length).to.equal(3);
       done();
     }).catch(done);
   });
@@ -598,8 +603,8 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
   
   lab.test('single static statement', (done) => {
     Test.getuno({}, {LAST_NAME: 'Fritz'}).then((results) => {
-      expect(results.FirstName).to.equal('Nathan');
-      expect(results.LastName).to.equal('Fritz');
+      expect(results.result.FirstName).to.equal('Nathan');
+      expect(results.result.LastName).to.equal('Fritz');
       done();
     }).catch(done);
   });
@@ -619,7 +624,8 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
     })
     .then(() => {
       Name.multiresult()
-      .then((names) => {
+      .then((results) => {
+        const names = results.result;
         expect(names[0].items[1].name).to.equal('lettuce');
         expect(names[2].items[1].name).to.equal('hair');
         done();
@@ -643,7 +649,8 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
     })
     .then(() => {
       Name.multiresult()
-      .then((names) => {
+      .then((results) => {
+        const names = results.result;
         expect(names[0].item.name).to.equal('lettuce');
         expect(names[2].item.name).to.equal('hair');
         done();
@@ -689,63 +696,6 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
     done();
   });
 
-  /*
-  lab.test('queryResults error', (done) => {
-    Test._queryResults({}, 'ERROR', [], 0, Promise.resolve, function () {
-      done();
-    });
-  });
-  */
-
-
-  /*
-  lab.test('processArgs static', (done) => {
-    Test.mapProcedure({
-      static: true,
-      name: 'getuno2',
-      args: [
-        ['LAST_NAME', mssql.NVarChar(50)]
-      ],
-      processArgs: function (args, model) {
-        if (args.last) {
-          args.LAST_NAME = args.last;
-          delete args.last;
-        }
-        return args;
-      },
-      oneResult: true,
-    });
-    Test.getuno2({last: 'Fritz'}).then((results) => {
-      expect(results.FirstName).to.equal('Nathan');
-      expect(results.LastName).to.equal('Fritz');
-      done();
-    }).catch(done);
-  });
-
-  lab.test('processArgs instance', (done) => {
-    Test.mapProcedure({
-      static: false,
-      name: 'getuno2',
-      args: [
-        ['LAST_NAME', mssql.NVarChar(50)]
-      ],
-      processArgs: function (args, model) {
-        if (args.last) {
-          args.LAST_NAME = args.last;
-          delete args.last;
-        }
-        return args;
-      },
-      oneResult: true,
-    });
-    let test = Test.create({});
-    test.getuno2({last: 'Fritz'}).then((results) => {
-      expect(results.FirstName).to.equal('Nathan');
-      expect(results.LastName).to.equal('Fritz');
-      done();
-    }).catch(done);
-  });
-  */
 
   lab.test('no args statement', (done) => {
     const test = {};
@@ -758,7 +708,8 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
   });
   
   lab.test('custom type static', (done) => {
-    Test.customtype({id: 1, SomeSub: [{id: 1, a: 'Billy', b: 'Bob',}, {id: 2, a: 'Ham', b: 'Sammich'}]}).then((model) => {
+    Test.customtype({id: 1, SomeSub: [{id: 1, a: 'Billy', b: 'Bob',}, {id: 2, a: 'Ham', b: 'Sammich'}]}).then((results) => {
+      const model = results.result;
       expect(model[0].FirstName).to.equal('Billy');
       expect(model[0].LastName).to.equal('Bob');
       expect(model[1].FirstName).to.equal('Ham');
@@ -804,7 +755,8 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
     })
     .then(() => {
       const model = {id: 1, SomeSub: [{a: 'Billy', b: 'Bob'}, {a: 'Ham', b: 'Sammich'}]};
-      HasSubType.customtype(model).then((rmodel) => {
+      HasSubType.customtype(model).then((results) => {
+        const rmodel = results.result;
         expect(rmodel[0].FirstName).to.equal('Billy');
         expect(rmodel[0].LastName).to.equal('Bob');
         expect(rmodel[1].FirstName).to.equal('Ham');
@@ -868,8 +820,8 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
         expect(models[1].firstName).to.equal('test b1');
         expect(models[2].firstName).to.equal('test c1');
         return Model.getselect(models[0]);
-      }).then((model) => {
-        expect(model[0].firstName).to.equal('test_a1 x');
+      }).then((results) => {
+        expect(results.result[0].firstName).to.equal('test_a1 x');
         done();
       }).catch(done);
     });
@@ -877,8 +829,8 @@ SELECT @LastName AS LastName, @FirstName AS FirstName;`)
 
   lab.test('null TVP', (done) => {
     Test.customtype({id: 1}).then((model) => {
-      expect(Array.isArray(model)).to.equal(true);
-      expect(model.length).to.equal(0);
+      expect(Array.isArray(model.result)).to.equal(true);
+      expect(model.result.length).to.equal(0);
       done();
     }).catch(done);
   });

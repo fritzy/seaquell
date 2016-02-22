@@ -505,6 +505,11 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
         request.input(field, argdef, args[field]);
       }
     });
+    if (Array.isArray(opts.output)) {
+      opts.output.forEach((arg) => {
+        request.output(arg[0], arg[1]);
+      });
+    }
     return request;
   }
 
@@ -516,9 +521,9 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
       const callArgs = dataCall[row.DATA_TYPE].map((col) => {
         return row[col];
       });
-      return [row.PARAMETER_NAME.slice(1), dataTypes[row.DATA_TYPE].apply(mssql, callArgs)];
+      return [row.PARAMETER_MODE, row.PARAMETER_NAME.slice(1), dataTypes[row.DATA_TYPE].apply(mssql, callArgs)];
     } else {
-      return [row.PARAMETER_NAME.slice(1), dataTypes[row.DATA_TYPE]];
+      return [row.PARAMETER_MODE, row.PARAMETER_NAME.slice(1), dataTypes[row.DATA_TYPE]];
     }
   }
 
@@ -529,7 +534,7 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
       const request = new mssql.Request(db);
       oRequest = request;
       request.multiple = true;
-      return Promise.resolve(request.query(`SELECt * FROM information_schema.parameters where specific_name='${opts.name}' ORDER BY ORDINAL_POSITION`), request);
+      return Promise.resolve(request.query(`SELECT * FROM information_schema.parameters where specific_name='${opts.name}' ORDER BY ORDINAL_POSITION`), request);
     })
     .then((result, request) => {
       const args = [];
@@ -559,17 +564,17 @@ order by c.column_id`, (err, result) => {
                 }
                 /* $lab:coverage:on$ */
                 const coltypes = [];
-                for (const row of result[0]) {
-                  if (dataUserCall.hasOwnProperty(row.colType)) {
-                    const callArgs = dataUserCall[row.colType].map((col) => {
-                      return row[col];
+                for (const tvprow of result[0]) {
+                  if (dataUserCall.hasOwnProperty(tvprow.colType)) {
+                    const callArgs = dataUserCall[tvprow.colType].map((col) => {
+                      return tvprow[col];
                     });
-                    coltypes.push([row.colName, dataTypes[row.colType].apply(mssql, callArgs)]);
+                    coltypes.push([tvprow.colName, dataTypes[tvprow.colType].apply(mssql, callArgs)]);
                   } else {
-                    coltypes.push([row.colName, dataTypes[row.colType]]);
+                    coltypes.push([tvprow.colName, dataTypes[tvprow.colType]]);
                   }
                 }
-                resolve([row.PARAMETER_NAME.slice(1), TVP(coltypes)]);
+                resolve([row.PARAMETER_MODE, row.PARAMETER_NAME.slice(1), TVP(coltypes)]);
               });
             })
           );
@@ -580,9 +585,22 @@ order by c.column_id`, (err, result) => {
         return Promise.resolve(args);
       });
     })
-    .then((inputs) => {
+    .then((inandout) => {
       const util = require('util');
+      const inputs = [];
+      const outputs = [];
+      for (const param of inandout) {
+        if (param[0] === 'INOUT') {
+          outputs.push(param.slice(1));
+          inputs.push(param.slice(1));
+        } else if (param[0] === 'OUT') {
+          outputs.push(param.slice(1));
+        } else {
+          inputs.push(param.slice(1));
+        }
+      }
       opts.args = inputs;
+      opts.output = outputs;
       this[opts.name] = function (obj, args) {
         args = args || {};
         const pm = this.validateAndProcess(obj, 'toDB');
@@ -595,13 +613,13 @@ order by c.column_id`, (err, result) => {
           lodash.assign(obj, args);
           const request = this._makeRequest(db, obj, opts);
           return new Promise((resolve, reject) => {
-            request.execute(opts.name, (err, recordsets, returnValue) => {
+            request.execute(opts.name, (err, recordsets, returnValue, affected) => {
               /* $lab:coverage:off$ */
               if (err) {
                 return reject(err);
               }
               /* $lab:coverage:on$ */
-              return resolve(this._procedureResults(opts, recordsets, returnValue));
+              return resolve(this._procedureResults(opts, recordsets, returnValue, request));
             });
           });
         });
@@ -609,7 +627,7 @@ order by c.column_id`, (err, result) => {
     });
   };
 
-  _procedureResults(opts, recordsets, returnValue) {
+  _procedureResults(opts, recordsets, returnValue, request) {
     if (opts.oneResult) {
       if (recordsets[0].length === 0) {
         return Promise.reject(new EmptyResult);
@@ -662,10 +680,14 @@ order by c.column_id`, (err, result) => {
         }
       }
       const primaryModel = this.getModel(opts.resultModels[0] || this);
-      if (opts.oneResult) {
-        return Promise.resolve(results.get(primaryModel)[0]);
+      const output = {};
+      for (const param of opts.output) {
+        output[param[0]] = request.parameters[param[0]].value;
       }
-      return Promise.resolve(results.get(primaryModel));
+      if (opts.oneResult) {
+        return Promise.resolve({result: results.get(primaryModel)[0], output});
+      }
+      return Promise.resolve({result: results.get(primaryModel), output});
     });
   }
 }
