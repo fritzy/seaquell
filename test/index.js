@@ -333,7 +333,7 @@ SELECT a AS FIRST_NAME, b AS LAST_NAME FROM @SomeSub;`);
       request.multiple = true;
       request.query(`IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'getuno') AND type IN (N'P', N'PC')) DROP PROCEDURE getuno`).then(() => {
         return request.query(`CREATE PROCEDURE getuno
-    @LAST_NAME VARCHAR(50)
+    @LAST_NAME VARCHAR(MAX)
   AS
     CREATE TABLE #TempTest (FIRST_NAME VARCHAR(50), LAST_NAME VARCHAR(50));
     INSERT INTO #TempTest (FIRST_NAME, LAST_NAME) VALUES ('Nathan', 'Fritz'), ('Robert', 'Robles'), ('Cow', 'Town');

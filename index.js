@@ -519,6 +519,9 @@ WHERE TABLE_NAME = '${tname}'`, (err, r) => {
     }
     if (dataCall[row.DATA_TYPE]) {
       const callArgs = dataCall[row.DATA_TYPE].map((col) => {
+        if (col === 'CHARACTER_MAXIMUM_LENGTH' && row[col] === -1) {
+          return undefined;
+        }
         return row[col];
       });
       return [row.PARAMETER_MODE, row.PARAMETER_NAME.slice(1), dataTypes[row.DATA_TYPE].apply(mssql, callArgs)];
@@ -567,6 +570,9 @@ order by c.column_id`, (err, result) => {
                 for (const tvprow of result[0]) {
                   if (dataUserCall.hasOwnProperty(tvprow.colType)) {
                     const callArgs = dataUserCall[tvprow.colType].map((col) => {
+                      if (col === 'CHARACTER_MAXIMUM_LENGTH' && tvprow[col] === -1) {
+                        return undefined;
+                      }
                       return tvprow[col];
                     });
                     coltypes.push([tvprow.colName, dataTypes[tvprow.colType].apply(mssql, callArgs)]);
