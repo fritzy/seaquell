@@ -690,9 +690,9 @@ order by c.column_id`, (err, result) => {
         output[param[0]] = request.parameters[param[0]].value;
       }
       if (opts.oneResult) {
-        return Promise.resolve({result: results.get(primaryModel)[0], output});
+        return Promise.resolve({result: results.get(primaryModel)[0], output, returnValue});
       }
-      return Promise.resolve({result: results.get(primaryModel), output});
+      return Promise.resolve({result: results.get(primaryModel), output, returnValue});
     });
   }
 }
