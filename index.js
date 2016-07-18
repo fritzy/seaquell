@@ -665,13 +665,13 @@ order by c.column_id`, (err, result) => {
     .then(() => {
       for (let factory of results.keys()) {
         for (let field of Object.keys(factory.map)) {
-          let lfield = this.map[field].local;
-          let rfield = this.map[field].remote;
-          let relFactory = this.getModel(this.map[field].collection || this.map[field].model);
+          let lfield = factory.map[field].local;
+          let rfield = factory.map[field].remote;
+          let relFactory = this.getModel(factory.map[field].collection || factory.map[field].model);
           (results.get(factory)).forEach( (local) => {
             (results.get(relFactory)).forEach( (remote) => {
               if (remote[rfield] == local[lfield]) {
-                if (this.map[field].collection) {
+                if (factory.map[field].collection) {
                   if (!local[field]) {
                     local[field] = [];
                   }
